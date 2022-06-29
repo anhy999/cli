@@ -312,14 +312,10 @@ class Results {
   }
 }
 
-// TODO attr foo in tests that's a number
-// I think attributeMatch should handle it and cast it since the ast parser always returns strings
-
 // operators for attribute selectors
 const attributeOperators = {
   // existence of the attribute
   '' ({ attr }) {
-    // TODO existence of attribute in case it's falsey (i.e. 0)
     return Boolean(attr)
   },
   // attribute value is equivalent
@@ -348,6 +344,24 @@ const attributeOperators = {
   },
 }
 
+const attributeOperator = ({ attr, value, insensitive, operator }) => {
+  if (typeof attr === 'number') {
+    attr = String(attr)
+  }
+  if (typeof attr !== 'string') {
+    // It's an object or an array, bail
+    return false
+  }
+  if (insensitive) {
+    attr = attr.toLowerCase()
+  }
+  return attributeOperators[operator]({
+    attr,
+    insensitive,
+    value,
+  })
+}
+
 const attributeMatch = (matcher, obj) => {
   const insensitive = !!matcher.insensitive
   const operator = matcher.operator || ''
@@ -360,61 +374,34 @@ const attributeMatch = (matcher, obj) => {
   // then we try to match every item in the array
   if (Array.isArray(obj[attribute])) {
     return obj[attribute].find((i, index) => {
-      let attr = obj[attribute][index] || ''
-      // TODO handle number here
-      if (typeof attr !== 'string') {
-        // It's an object, bail
-        return false
-      }
-      if (insensitive) {
-        attr = attr.toLowerCase()
-      }
-      return attributeOperators[operator]({
-        attr,
-        insensitive,
-        value,
-      })
+      const attr = obj[attribute][index] || ''
+      return attributeOperator({ attr, value, insensitive, operator })
     })
   } else {
-    let attr = obj[attribute] || ''
-    // TODO handle number here
-    if (typeof attr !== 'string') {
-      // It's an object, bail
-      return false
-    }
-    if (insensitive) {
-      attr = attr.toLowerCase()
-    }
-
-    return attributeOperators[operator]({
-      attr,
-      value,
-      insensitive,
-    })
+    const attr = obj[attribute] || ''
+    return attributeOperator({ attr, value, insensitive, operator })
   }
+}
+
+const edgeIsType = (node, type, seen = new Set()) => {
+  for (const edgeIn of node.edgesIn) {
+    // TODO Need a test with an infinite loop
+    if (seen.has(edgeIn)) {
+      continue
+    }
+    seen.add(edgeIn)
+    if (edgeIn.type === type || edgeIn.from[type] || edgeIsType(edgeIn.from, type, seen)) {
+      return true
+    }
+  }
+  return false
 }
 
 const filterByType = (nodes, type) => {
   const found = []
-  FBT_NODELOOP:
   for (const node of nodes) {
-    if (node[type]) {
+    if (node[type] || edgeIsType(node, type)) {
       found.push(node)
-      continue
-    }
-    // Need a test w/ a dev dep that's also a prod dep of a prod dep
-    for (const edgeIn of node.edgesIn) {
-      if (edgeIn.type === type) {
-        found.push(node)
-        continue FBT_NODELOOP
-      }
-    }
-    // Need a test w/ a dev dep that has a production dep
-    for (const ancestor of node.target.ancestry()) {
-      if (ancestor[type]) {
-        found.push(node)
-        continue FBT_NODELOOP
-      }
     }
   }
   return found
@@ -424,28 +411,30 @@ const filterByNotType = (nodes, type) => {
   const found = []
   FBNT_NODELOOP:
   for (const node of nodes) {
-    // Need a test where the dep is dev dep
     if (node[type] || !node.parent) {
       continue
     }
     // Start off assuming we are of the type, and try to prove otherwise
     let ofType = true
     for (const edgeIn of node.edgesIn) {
-      // need a test w/ a prod dep that has a prod (non-dev) edge
       if (edgeIn.type !== type) {
         // Found one that's not of the type, so we are not anymore
         ofType = false
         break
       }
+      console.log(`${edgeIn.from.name} ${edgeIn.type} is ${type}`)
     }
     if (ofType) {
+      // node itself can't be dev but it needs to only have edges that are dev
+      // but it also has to be a prod dep
+      console.log(`ofType ${node.name}`)
       continue
     }
     // Now see if any of our ancestors are of the type and continue if they are
     for (const ancestor of node.target.ancestry()) {
-      // need a test w/ a prod dep of a dev dep
+      // TODO Need a test w/ a prod dep of a dev dep
       if (ancestor[type]) {
-        // Ancestors are of the type so we're not, continue
+        // Ancestors are of the type so we're not, continue to next node
         continue FBNT_NODELOOP
       }
     }
@@ -505,7 +494,7 @@ const hasParent = (node, compareNodes) => {
 // checks if a given node is a descendant of any of the nodes provided in the
 // compareNodes array
 const hasAscendant = (node, compareNodes, seen = new Set()) => {
-  // TODO loop over ancestry property?
+  // TODO (future) loop over ancestry property
   if (hasParent(node, compareNodes)) {
     return true
   }
@@ -514,7 +503,7 @@ const hasAscendant = (node, compareNodes, seen = new Set()) => {
     return hasAscendant(node.resolveParent, compareNodes)
   }
   for (const edge of node.edgesIn) {
-    // TODO put an infinite loop in the tests
+    // TODO Need a test with an infinite loop
     if (seen.has(edge)) {
       continue
     }

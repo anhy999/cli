@@ -14,21 +14,25 @@ const querySelectorAll = async (tree, query) => {
 
 t.test('query-selector-all', async t => {
   /*
-   fixture:
+   fixture tree:
 
     query-selector-all-tests@1.0.0
-    ├── @npmcli/abbrev@2.0.0 extraneous
-    ├─┬ a@1.0.0 -> ./a
-    │ └─┬ baz@1.0.0
-    │   └── lorem@1.0.0
-    ├── abbrev@1.1.1
-    ├─┬ b@1.0.0 -> ./b
-    │ └── bar@2.0.0 deduped
-    ├── bar@2.0.0
-    └─┬ foo@2.2.2
-      ├─┬ bar@1.4.0
-      │ └── dasher@2.0.0
-      └── dash-separated-pkg@1.0.0
+    ├── @npmcli/abbrev@2.0.0 (extraneous)
+    ├─┬ a@1.0.0 -> ./a (production dep of query-selector-all-tests, workspace)
+    │ └─┬ baz@1.0.0 (optional dep of a)
+    │   └── lorem@1.0.0 (production dep of baz)
+    ├── abbrev@1.1.1 (production dep of query-selector-all-tests)
+    ├─┬ b@1.0.0 -> ./b (workspace)
+    │ └── bar@2.0.0 (production dep of b, deduped)
+    ├─┬ bar@2.0.0 (production dep of query-selector-all-tests)
+    │ └── moo@3.0.0 (production dep of bar)
+    ├─┬ foo@2.2.2 (dev dep of query-selector-all-tests)
+    │ ├─┬ bar@1.4.0 (production dep of foo, deduped)
+    │ │ └── dasher@2.0.0 (peer dep of bar)
+    │ └── dash-separated-pkg@1.0.0 (production dep of foo)
+    └── moo@3.0.0 (dev dep of query-selector-all-tests)
+
+
    */
   const path = t.testdir({
     node_modules: {
@@ -53,6 +57,9 @@ t.test('query-selector-all', async t => {
         'package.json': JSON.stringify({
           name: 'bar',
           version: '2.0.0',
+          dependencies: {
+            moo: '3.0.0',
+          },
           arbitrary: {
             foo: [
               false,
@@ -130,9 +137,18 @@ t.test('query-selector-all', async t => {
           name: 'lorem',
           version: '1.0.0',
           keywords: ['lorem', 'ipsum', 'sit', 'amet'],
+          devDependencies: {
+            moo: '^3.0.0'
+          },
           funding: [
             { type: 'GitHub', url: 'https://github.com/sponsors' },
           ],
+        }),
+      },
+      moo: {
+        'package.json': JSON.stringify({
+          name: 'moo',
+          version: '3.0.0',
         }),
       },
     },
@@ -147,6 +163,9 @@ t.test('query-selector-all', async t => {
       name: 'b',
       version: '1.0.0',
       private: true,
+      devDependencies: {
+        a: '^1.0.0',
+      },
       dependencies: {
         bar: '^2.0.0',
       },
@@ -163,6 +182,7 @@ t.test('query-selector-all', async t => {
       },
       devDependencies: {
         foo: '^2.0.0',
+        moo: '^3.0.0',
       },
       bundleDependencies: ['abbrev'],
     }),
@@ -247,6 +267,7 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     ['* > *', [
       'a@1.0.0',
@@ -260,6 +281,7 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     ['> #a', ['a@1.0.0']],
 
@@ -273,6 +295,7 @@ t.test('query-selector-all', async t => {
       'bar@2.0.0',
       'foo@2.2.2',
       'ipsum@npm:sit@1.0.0',
+      'moo@3.0.0',
     ]],
     [':root > .workspace', ['a@1.0.0', 'b@1.0.0']],
     [':root > *.workspace', ['a@1.0.0', 'b@1.0.0']],
@@ -294,16 +317,16 @@ t.test('query-selector-all', async t => {
       'a@1.0.0',
       'abbrev@1.1.1',
       'b@1.0.0',
-      'bar@2.0.0',
       'dash-separated-pkg@1.0.0',
       'dasher@2.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     [':root > :empty', [
       'a@1.0.0',
       'abbrev@1.1.1',
       'b@1.0.0',
-      'bar@2.0.0',
+      'moo@3.0.0',
     ]],
     [':extraneous', ['@npmcli/abbrev@2.0.0-beta.45']],
     [':invalid', ['lorem@1.0.0']],
@@ -326,15 +349,17 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     [':root > .workspace:not(#b)', ['a@1.0.0']],
-    [':root > .workspace > *:not(#bar)', ['baz@1.0.0']],
+    [':root > .workspace > *:not(#bar)', ['a@1.0.0', 'baz@1.0.0']],
     ['.bundled ~ :not(.workspace)', [
       'bar@2.0.0',
       'foo@2.2.2',
       'ipsum@npm:sit@1.0.0',
+      'moo@3.0.0',
     ]],
-    ['*:root > *:empty:not(*[name^=a], #b)', ['bar@2.0.0']],
+    ['*:root > *:empty:not(*[name^=a], #b)', ['moo@3.0.0']],
     [':not(:not(:link))', [
       'a@1.0.0',
       'b@1.0.0',
@@ -348,11 +373,12 @@ t.test('query-selector-all', async t => {
     ['.workspace:has(* #lorem, ~ #b)', ['a@1.0.0']],
 
     // is pseudo
-    [':is(#a, #b) > *', ['bar@2.0.0', 'baz@1.0.0']],
-    // TODO: ipsum is not empty but it's child is missing
-    // so it doesn't return a result here
+    [':is(#a, #b) > *', ['a@1.0.0', 'bar@2.0.0', 'baz@1.0.0']],
+    // TODO: ipsum is not empty but its child is missing so it doesn't return a
+    // result here
     [':root > *:is(.prod:not(:empty), .dev > [name=bar]) > *', [
       'dasher@2.0.0',
+      'moo@3.0.0',
     ]],
     [':is(*:semver(2.0.0), :semver(=2.0.0-beta.45))', [
       '@npmcli/abbrev@2.0.0-beta.45',
@@ -375,16 +401,19 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     [':type(tag)', ['lorem@1.0.0']],
     [':type(alias)', ['ipsum@npm:sit@1.0.0']],
     [':type(range)', [
+      'a@1.0.0',
       'abbrev@1.1.1',
       'bar@2.0.0',
       'baz@1.0.0',
       'dash-separated-pkg@1.0.0',
       'foo@2.2.2',
       'bar@1.4.0',
+      'moo@3.0.0',
     ]],
     [':type(git)', []],
 
@@ -398,6 +427,7 @@ t.test('query-selector-all', async t => {
       'foo@2.2.2',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     [':path(node_modules/bar)', ['bar@2.0.0']],
     [':path(./node_modules/bar)', ['bar@2.0.0']],
@@ -418,6 +448,7 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
 
     // semver pseudo
@@ -435,6 +466,7 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     [':semver(*)', [
       'query-selector-all-tests@1.0.0',
@@ -449,6 +481,7 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     [':semver(2.0.0)', [
       'bar@2.0.0',
@@ -458,6 +491,7 @@ t.test('query-selector-all', async t => {
       'bar@2.0.0',
       'dasher@2.0.0',
       'foo@2.2.2',
+      'moo@3.0.0',
     ]],
     [':semver(~2.0.x)', [
       'bar@2.0.0',
@@ -467,6 +501,7 @@ t.test('query-selector-all', async t => {
       'bar@2.0.0',
       'dasher@2.0.0',
       'foo@2.2.2',
+      'moo@3.0.0',
     ]],
     [':semver(=1.4.0)', ['bar@1.4.0']],
     [':semver(1.4.0 || 2.2.2)', ['foo@2.2.2', 'bar@1.4.0']],
@@ -482,6 +517,7 @@ t.test('query-selector-all', async t => {
     [':attr(funding, :attr([type=GitHub]))', ['lorem@1.0.0']],
     [':attr(arbitrary, foo, :attr(funding, [type=GH]))', ['bar@2.0.0']],
     [':attr(arbitrary, foo, :attr(funding, [type=gh i]))', ['bar@2.0.0']],
+    [':attr(arbitrary, :attr([foo=10000]))', ['bar@2.0.0']],
 
     // attribute matchers
     ['[name]', [
@@ -498,6 +534,7 @@ t.test('query-selector-all', async t => {
       'bar@1.4.0',
       'ipsum@npm:sit@1.0.0',
       'lorem@1.0.0',
+      'moo@3.0.0',
     ]],
     ['[name=a]', ['a@1.0.0']],
     ['[name=@npmcli/abbrev]', ['@npmcli/abbrev@2.0.0-beta.45']],
@@ -505,7 +542,7 @@ t.test('query-selector-all', async t => {
     ['[name=a], *[name=b]', ['a@1.0.0', 'b@1.0.0']],
     ['[name^=a]', ['a@1.0.0', 'abbrev@1.1.1']],
     ['[name|=dash]', ['dash-separated-pkg@1.0.0']],
-    ['[name$=oo]', ['foo@2.2.2']],
+    ['[name$=oo]', ['foo@2.2.2', 'moo@3.0.0']],
     ['[description]', [
       'dash-separated-pkg@1.0.0',
       'dasher@2.0.0',
@@ -530,21 +567,34 @@ t.test('query-selector-all', async t => {
     ['[license=ISC]', ['abbrev@1.1.1', 'baz@1.0.0']],
     ['[license=isc i]', ['abbrev@1.1.1', 'baz@1.0.0']],
 
-    // classes
+    // types
+    ['.prod', [
+      "a@1.0.0",
+      "abbrev@1.1.1",
+      "b@1.0.0",
+      "bar@2.0.0",
+      "baz@1.0.0",
+      "ipsum@npm:sit@1.0.0",
+      "lorem@1.0.0",
+      "moo@3.0.0",
+    ]],
     ['.workspace', ['a@1.0.0', 'b@1.0.0']],
-    ['.workspace > *', ['bar@2.0.0', 'baz@1.0.0']],
+    ['.workspace > *', ['a@1.0.0', 'bar@2.0.0', 'baz@1.0.0']],
     ['.workspace ~ *', [
       'abbrev@1.1.1',
       'bar@2.0.0',
       'foo@2.2.2',
       'ipsum@npm:sit@1.0.0',
+      'moo@3.0.0',
     ]],
     ['.dev', [
       '@npmcli/abbrev@2.0.0-beta.45',
+      'a@1.0.0',
       'dash-separated-pkg@1.0.0',
       'dasher@2.0.0',
       'foo@2.2.2',
       'bar@1.4.0',
+      'moo@3.0.0',
     ]],
     ['.dev *', ['dash-separated-pkg@1.0.0', 'dasher@2.0.0', 'bar@1.4.0']],
     ['.peer', ['@npmcli/abbrev@2.0.0-beta.45', 'dasher@2.0.0']],
@@ -556,6 +606,7 @@ t.test('query-selector-all', async t => {
       'bar@2.0.0',
       'foo@2.2.2',
       'ipsum@npm:sit@1.0.0',
+      'moo@3.0.0',
     ]],
 
     // id selector
@@ -581,10 +632,10 @@ t.test('query-selector-all', async t => {
     ['#bar:semver(1 || 2.0.0)', ['bar@2.0.0', 'bar@1.4.0']],
     ['#bar:semver(1.4.0 || 2)', ['bar@2.0.0', 'bar@1.4.0']],
     ['#ipsum', ['ipsum@npm:sit@1.0.0']],
-    ['#bar > *', ['dasher@2.0.0']],
+    ['#bar > *', ['dasher@2.0.0', 'moo@3.0.0']],
     [':root > #bar', ['bar@2.0.0']],
-    [':root > #bar > *', []],
-    [':root #bar > *', ['dasher@2.0.0']],
+    [':root > #bar > *', ['moo@3.0.0']],
+    [':root #bar > *', ['dasher@2.0.0', 'moo@3.0.0']],
     [':root #bar:semver(1) > *', ['dasher@2.0.0']],
     [':root #bar:semver(1) ~ *', ['dash-separated-pkg@1.0.0']],
     ['#bar:semver(2), #foo', ['bar@2.0.0', 'foo@2.2.2']],
