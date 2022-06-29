@@ -361,6 +361,7 @@ const attributeMatch = (matcher, obj) => {
   if (Array.isArray(obj[attribute])) {
     return obj[attribute].find((i, index) => {
       let attr = obj[attribute][index] || ''
+      // TODO handle number here
       if (typeof attr !== 'string') {
         // It's an object, bail
         return false
@@ -376,6 +377,7 @@ const attributeMatch = (matcher, obj) => {
     })
   } else {
     let attr = obj[attribute] || ''
+    // TODO handle number here
     if (typeof attr !== 'string') {
       // It's an object, bail
       return false
@@ -392,16 +394,63 @@ const attributeMatch = (matcher, obj) => {
   }
 }
 
-// a dependency is of a given type if any of its edgesIn are also of that type
 const filterByType = (nodes, type) => {
   const found = []
+  FBT_NODELOOP:
   for (const node of nodes) {
-    for (const edge of node.edgesIn) {
-      if (edge[type]) {
+    if (node[type]) {
+      found.push(node)
+      continue
+    }
+    // Need a test w/ a dev dep that's also a prod dep of a prod dep
+    for (const edgeIn of node.edgesIn) {
+      if (edgeIn.type === type) {
         found.push(node)
+        continue FBT_NODELOOP
+      }
+    }
+    // Need a test w/ a dev dep that has a production dep
+    for (const ancestor of node.target.ancestry()) {
+      if (ancestor[type]) {
+        found.push(node)
+        continue FBT_NODELOOP
+      }
+    }
+  }
+  return found
+}
+
+const filterByNotType = (nodes, type) => {
+  const found = []
+  FBNT_NODELOOP:
+  for (const node of nodes) {
+    // Need a test where the dep is dev dep
+    if (node[type] || !node.parent) {
+      continue
+    }
+    // Start off assuming we are of the type, and try to prove otherwise
+    let ofType = true
+    for (const edgeIn of node.edgesIn) {
+      // need a test w/ a prod dep that has a prod (non-dev) edge
+      if (edgeIn.type !== type) {
+        // Found one that's not of the type, so we are not anymore
+        ofType = false
         break
       }
     }
+    if (ofType) {
+      continue
+    }
+    // Now see if any of our ancestors are of the type and continue if they are
+    for (const ancestor of node.target.ancestry()) {
+      // need a test w/ a prod dep of a dev dep
+      if (ancestor[type]) {
+        // Ancestors are of the type so we're not, continue
+        continue FBNT_NODELOOP
+      }
+    }
+    // We are not of the type now
+    found.push(node)
   }
   return found
 }
@@ -409,7 +458,8 @@ const filterByType = (nodes, type) => {
 const depTypes = {
   // dependency
   '.prod' (prevResults) {
-    return filterByType(prevResults, 'prod')
+    // Can't be dev
+    return filterByNotType(prevResults, 'dev')
   },
   // devDependency
   '.dev' (prevResults) {
@@ -454,7 +504,8 @@ const hasParent = (node, compareNodes) => {
 
 // checks if a given node is a descendant of any of the nodes provided in the
 // compareNodes array
-const hasAscendant = (node, compareNodes) => {
+const hasAscendant = (node, compareNodes, seen = new Set()) => {
+  // TODO loop over ancestry property?
   if (hasParent(node, compareNodes)) {
     return true
   }
@@ -463,7 +514,12 @@ const hasAscendant = (node, compareNodes) => {
     return hasAscendant(node.resolveParent, compareNodes)
   }
   for (const edge of node.edgesIn) {
-    if (edge && edge.from && hasAscendant(edge.from, compareNodes)) {
+    // TODO put an infinite loop in the tests
+    if (seen.has(edge)) {
+      continue
+    }
+    seen.add(edge)
+    if (edge && edge.from && hasAscendant(edge.from, compareNodes, seen)) {
       return true
     }
   }
@@ -539,7 +595,7 @@ const querySelectorAll = async (targetNode, query) => {
   })
 
   // returns nodes ordered by realpath
-  return [...res].sort((a, b) => localeCompare(a.realpath, b.realpath))
+  return [...res].sort((a, b) => localeCompare(a.location, b.location))
 }
 
 module.exports = querySelectorAll

@@ -290,10 +290,10 @@ t.test('query-selector-all', async t => {
 
     // pseudo miscelaneous
     [':empty', [
-      'a@1.0.0',
-      'b@1.0.0',
       '@npmcli/abbrev@2.0.0-beta.45',
+      'a@1.0.0',
       'abbrev@1.1.1',
+      'b@1.0.0',
       'bar@2.0.0',
       'dash-separated-pkg@1.0.0',
       'dasher@2.0.0',
@@ -301,8 +301,8 @@ t.test('query-selector-all', async t => {
     ]],
     [':root > :empty', [
       'a@1.0.0',
-      'b@1.0.0',
       'abbrev@1.1.1',
+      'b@1.0.0',
       'bar@2.0.0',
     ]],
     [':extraneous', ['@npmcli/abbrev@2.0.0-beta.45']],
@@ -539,10 +539,16 @@ t.test('query-selector-all', async t => {
       'foo@2.2.2',
       'ipsum@npm:sit@1.0.0',
     ]],
-    ['.dev', ['foo@2.2.2']],
+    ['.dev', [
+      '@npmcli/abbrev@2.0.0-beta.45',
+      'dash-separated-pkg@1.0.0',
+      'dasher@2.0.0',
+      'foo@2.2.2',
+      'bar@1.4.0',
+    ]],
     ['.dev *', ['dash-separated-pkg@1.0.0', 'dasher@2.0.0', 'bar@1.4.0']],
-    ['.peer', ['dasher@2.0.0']],
-    ['.optional', ['baz@1.0.0']],
+    ['.peer', ['@npmcli/abbrev@2.0.0-beta.45', 'dasher@2.0.0']],
+    ['.optional', ['@npmcli/abbrev@2.0.0-beta.45', 'baz@1.0.0', 'lorem@1.0.0']],
     ['.bundled', ['abbrev@1.1.1']],
     ['.bundled ~ *', [
       'a@1.0.0',
