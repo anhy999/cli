@@ -1,20 +1,51 @@
-const { join } = require('path')
-const { promisify } = require('util')
-const fs = require('fs')
+const { join } = require('node:path')
+const fs = require('node:fs/promises')
+const ini = require('ini')
 const tspawk = require('../../fixtures/tspawk')
 const t = require('tap')
+const { load: _loadMockNpm } = require('../../fixtures/mock-npm')
+const { cleanCwd } = require('../../fixtures/clean-snapshot.js')
 
 const spawk = tspawk(t)
 
-const readFile = promisify(fs.readFile)
+const replaceJsonOrIni = (key) => [
+  new RegExp(`(\\s(?:${key} = |"${key}": )"?)[^"\\n,]+`, 'g'),
+  `$1{${key.toUpperCase()}}`,
+]
 
-const Sandbox = require('../../fixtures/sandbox.js')
+const replaceIniComment = (key) => [
+  new RegExp(`(; ${key} = ).*`, 'g'),
+  `$1{${key.replaceAll(' ', '-').toUpperCase()}}`,
+]
+
+t.cleanSnapshot = (s) => cleanCwd(s)
+  .replaceAll(...replaceIniComment('node version'))
+  .replaceAll(...replaceIniComment('npm version'))
+  .replaceAll(...replaceIniComment('node bin location'))
+  .replaceAll(...replaceJsonOrIni('npm-version'))
+  .replaceAll(...replaceJsonOrIni('viewer'))
+  .replaceAll(...replaceJsonOrIni('shell'))
+  .replaceAll(...replaceJsonOrIni('editor'))
+  .replaceAll(...replaceJsonOrIni('progress'))
+  .replaceAll(...replaceJsonOrIni('color'))
+  .replaceAll(...replaceJsonOrIni('cache'))
+
+const loadMockNpm = (t, opts = {}) => _loadMockNpm(t, {
+  ...opts,
+  config: {
+    ...opts.config,
+    // Reset configs that mock npm sets by default
+    'fetch-retries': undefined,
+    loglevel: undefined,
+    color: false,
+  },
+})
 
 t.test('config no args', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm } = await loadMockNpm(t)
 
   await t.rejects(
-    sandbox.run('config', []),
+    npm.exec('config', []),
     {
       code: 'EUSAGE',
     },
@@ -23,93 +54,114 @@ t.test('config no args', async t => {
 })
 
 t.test('config ignores workspaces', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm } = await loadMockNpm(t, {
+    config: {
+      workspaces: true,
+    },
+  })
 
   await t.rejects(
-    sandbox.run('config', ['--workspaces']),
+    npm.exec('config'),
     {
-      code: 'EUSAGE',
+      code: 'ENOWORKSPACES',
     },
     'rejects with usage'
-  )
-
-  t.match(
-    sandbox.logs.warn,
-    [['config', 'This command does not support workspaces.']],
-    'logged the warning'
   )
 })
 
 t.test('config list', async t => {
-  const sandbox = new Sandbox(t)
-
-  const temp = t.testdir({
-    global: {
-      npmrc: 'globalloaded=yes',
-    },
-    project: {
+  const { npm, joinedOutput } = await loadMockNpm(t, {
+    prefixDir: {
       '.npmrc': 'projectloaded=yes',
     },
-    home: {
-      '.npmrc': 'userloaded=yes',
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'globalloaded=yes',
+      },
+    },
+    homeDir: {
+      '.npmrc': [
+        'userloaded=yes',
+        'auth=bad',
+        '_auth=bad',
+        '//nerfdart:auth=bad',
+        '//nerfdart:_auth=bad',
+      ].join('\n'),
     },
   })
-  const global = join(temp, 'global')
-  const project = join(temp, 'project')
-  const home = join(temp, 'home')
 
-  await sandbox.run('config', ['list'], { global, project, home })
+  await npm.exec('config', ['list'])
 
-  t.matchSnapshot(sandbox.output, 'output matches snapshot')
+  const output = joinedOutput()
+
+  t.match(output, 'projectloaded = "yes"')
+  t.match(output, 'globalloaded = "yes"')
+  t.match(output, 'userloaded = "yes"')
+
+  t.matchSnapshot(output, 'output matches snapshot')
 })
 
 t.test('config list --long', async t => {
-  const temp = t.testdir({
-    global: {
-      npmrc: 'globalloaded=yes',
-    },
-    project: {
+  const { npm, joinedOutput } = await loadMockNpm(t, {
+    prefixDir: {
       '.npmrc': 'projectloaded=yes',
     },
-    home: {
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'globalloaded=yes',
+      },
+    },
+    homeDir: {
       '.npmrc': 'userloaded=yes',
     },
+    config: {
+      long: true,
+    },
   })
-  const global = join(temp, 'global')
-  const project = join(temp, 'project')
-  const home = join(temp, 'home')
 
-  const sandbox = new Sandbox(t, { global, project, home })
-  await sandbox.run('config', ['list', '--long'])
+  await npm.exec('config', ['list'])
 
-  t.matchSnapshot(sandbox.output, 'output matches snapshot')
+  const output = joinedOutput()
+
+  t.match(output, 'projectloaded = "yes"')
+  t.match(output, 'globalloaded = "yes"')
+  t.match(output, 'userloaded = "yes"')
+
+  t.matchSnapshot(output, 'output matches snapshot')
 })
 
 t.test('config list --json', async t => {
-  const temp = t.testdir({
-    global: {
-      npmrc: 'globalloaded=yes',
-    },
-    project: {
+  const { npm, joinedOutput } = await loadMockNpm(t, {
+    prefixDir: {
       '.npmrc': 'projectloaded=yes',
     },
-    home: {
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'globalloaded=yes',
+      },
+    },
+    homeDir: {
       '.npmrc': 'userloaded=yes',
     },
+    config: {
+      json: true,
+    },
   })
-  const global = join(temp, 'global')
-  const project = join(temp, 'project')
-  const home = join(temp, 'home')
 
-  const sandbox = new Sandbox(t, { global, project, home })
-  await sandbox.run('config', ['list', '--json'])
+  await npm.exec('config', ['list'])
 
-  t.matchSnapshot(sandbox.output, 'output matches snapshot')
+  const output = joinedOutput()
+
+  t.match(output, '"projectloaded": "yes",')
+  t.match(output, '"globalloaded": "yes",')
+  t.match(output, '"userloaded": "yes",')
+
+  t.matchSnapshot(output, 'output matches snapshot')
 })
 
 t.test('config list with publishConfig', async t => {
-  const temp = t.testdir({
-    project: {
+  const loadMockNpmWithPublishConfig = (t, opts) => loadMockNpm(t, {
+    prefixDir: {
       'package.json': JSON.stringify({
         publishConfig: {
           registry: 'https://some.registry',
@@ -117,21 +169,43 @@ t.test('config list with publishConfig', async t => {
         },
       }),
     },
+    ...opts,
   })
-  const project = join(temp, 'project')
 
-  const sandbox = new Sandbox(t, { project })
-  await sandbox.run('config', ['list', ''])
-  await sandbox.run('config', ['list', '--global'])
+  t.test('local', async t => {
+    const { npm, joinedOutput } = await loadMockNpmWithPublishConfig(t)
 
-  t.matchSnapshot(sandbox.output, 'output matches snapshot')
+    await npm.exec('config', ['list'])
+
+    const output = joinedOutput()
+
+    t.match(output, 'registry = "https://some.registry"')
+
+    t.matchSnapshot(output, 'output matches snapshot')
+  })
+
+  t.test('global', async t => {
+    const { npm, joinedOutput } = await loadMockNpmWithPublishConfig(t, {
+      config: {
+        global: true,
+      },
+    })
+
+    await npm.exec('config', ['list'])
+
+    const output = joinedOutput()
+
+    t.notMatch(output, 'registry = "https://some.registry"')
+
+    t.matchSnapshot(output, 'output matches snapshot')
+  })
 })
 
 t.test('config delete no args', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm } = await loadMockNpm(t)
 
   await t.rejects(
-    sandbox.run('config', ['delete']),
+    npm.exec('config', ['delete']),
     {
       code: 'EUSAGE',
     },
@@ -141,68 +215,121 @@ t.test('config delete no args', async t => {
 
 t.test('config delete single key', async t => {
   // location defaults to user, so we work with a userconfig
-  const home = t.testdir({
-    '.npmrc': 'foo=bar\nbar=baz',
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'access=public\nall=true',
+    },
   })
 
-  const sandbox = new Sandbox(t)
-  await sandbox.run('config', ['delete', 'foo'], { home })
+  await npm.exec('config', ['delete', 'access'])
 
-  t.equal(sandbox.config.get('foo'), undefined, 'foo should no longer be set')
+  t.equal(npm.config.get('access'), null, 'acces should be defaulted')
 
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
-  t.not(contents.includes('foo='), 'foo was removed on disk')
+  const contents = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.not(rc.access, 'access is not set')
 })
 
 t.test('config delete multiple keys', async t => {
-  const home = t.testdir({
-    '.npmrc': 'foo=bar\nbar=baz\nbaz=buz',
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'access=public\nall=true\naudit=false',
+    },
   })
 
-  const sandbox = new Sandbox(t)
-  await sandbox.run('config', ['delete', 'foo', 'bar'], { home })
+  await npm.exec('config', ['delete', 'access', 'all'])
 
-  t.equal(sandbox.config.get('foo'), undefined, 'foo should no longer be set')
-  t.equal(sandbox.config.get('bar'), undefined, 'bar should no longer be set')
+  t.equal(npm.config.get('access'), null, 'access should be defaulted')
+  t.equal(npm.config.get('all'), false, 'all should be defaulted')
 
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
-  t.not(contents.includes('foo='), 'foo was removed on disk')
-  t.not(contents.includes('bar='), 'bar was removed on disk')
+  const contents = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.not(rc.access, 'access is not set')
+  t.not(rc.all, 'all is not set')
 })
 
 t.test('config delete key --location=global', async t => {
-  const global = t.testdir({
-    npmrc: 'foo=bar\nbar=baz',
+  const { npm, globalPrefix } = await loadMockNpm(t, {
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'access=public\nall=true',
+      },
+    },
+    config: {
+      location: 'global',
+    },
   })
+  await npm.exec('config', ['delete', 'access'])
 
-  const sandbox = new Sandbox(t)
-  await sandbox.run('config', ['delete', 'foo', '--location=global'], { global })
+  t.equal(npm.config.get('access', 'global'), undefined, 'access should be defaulted')
 
-  t.equal(sandbox.config.get('foo', 'global'), undefined, 'foo should no longer be set')
-
-  const contents = await readFile(join(global, 'npmrc'), { encoding: 'utf8' })
-  t.not(contents.includes('foo='), 'foo was removed on disk')
+  const contents = await fs.readFile(join(globalPrefix, 'etc/npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.not(rc.access, 'access is not set')
 })
 
 t.test('config delete key --global', async t => {
-  const global = t.testdir({
-    npmrc: 'foo=bar\nbar=baz',
+  const { npm, globalPrefix } = await loadMockNpm(t, {
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'access=public\nall=true',
+      },
+    },
+    config: {
+      global: true,
+    },
   })
 
-  const sandbox = new Sandbox(t)
-  await sandbox.run('config', ['delete', 'foo', '--global'], { global })
+  await npm.exec('config', ['delete', 'access'])
 
-  t.equal(sandbox.config.get('foo', 'global'), undefined, 'foo should no longer be set')
+  t.equal(npm.config.get('access', 'global'), undefined, 'access should no longer be set')
 
-  const contents = await readFile(join(global, 'npmrc'), { encoding: 'utf8' })
-  t.not(contents.includes('foo='), 'foo was removed on disk')
+  const contents = await fs.readFile(join(globalPrefix, 'etc/npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.not(rc.access, 'access is not set')
+})
+
+t.test('config set invalid option', async t => {
+  const { npm } = await loadMockNpm(t)
+  await t.rejects(
+    npm.exec('config', ['set', 'nonexistantconfigoption', 'something']),
+    /not a valid npm option/
+  )
+})
+
+t.test('config set deprecated option', async t => {
+  const { npm } = await loadMockNpm(t)
+  await t.rejects(
+    npm.exec('config', ['set', 'shrinkwrap', 'true']),
+    /deprecated/
+  )
+})
+
+t.test('config set nerf-darted option', async t => {
+  const { npm } = await loadMockNpm(t)
+  await npm.exec('config', ['set', '//npm.pkg.github.com/:_authToken', '0xdeadbeef'])
+  t.equal(
+    npm.config.get('//npm.pkg.github.com/:_authToken'),
+    '0xdeadbeef',
+    'nerf-darted config is set'
+  )
+})
+
+t.test('config set scoped optoin', async t => {
+  const { npm } = await loadMockNpm(t)
+  await npm.exec('config', ['set', '@npm:registry', 'https://registry.npmjs.org'])
+  t.equal(
+    npm.config.get('@npm:registry'),
+    'https://registry.npmjs.org',
+    'scoped config is set'
+  )
 })
 
 t.test('config set no args', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm } = await loadMockNpm(t)
 
   await t.rejects(
-    sandbox.run('config', ['set']),
+    npm.exec('config', ['set']),
     {
       code: 'EUSAGE',
     },
@@ -211,179 +338,215 @@ t.test('config set no args', async t => {
 })
 
 t.test('config set key', async t => {
-  const home = t.testdir({
-    '.npmrc': 'foo=bar',
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'access=public',
+    },
   })
 
-  const sandbox = new Sandbox(t, { home })
+  await npm.exec('config', ['set', 'access'])
 
-  await sandbox.run('config', ['set', 'foo'])
+  t.equal(npm.config.get('access'), null, 'set the value for access')
 
-  t.equal(sandbox.config.get('foo'), '', 'set the value for foo')
-
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
-  t.ok(contents.includes('foo='), 'wrote foo to disk')
+  await t.rejects(fs.stat(join(home, '.npmrc'), { encoding: 'utf8' }), 'removed empty config')
 })
 
 t.test('config set key value', async t => {
-  const home = t.testdir({
-    '.npmrc': 'foo=bar',
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'access=public',
+    },
   })
 
-  const sandbox = new Sandbox(t, { home })
+  await npm.exec('config', ['set', 'access', 'restricted'])
 
-  await sandbox.run('config', ['set', 'foo', 'baz'])
+  t.equal(npm.config.get('access'), 'restricted', 'set the value for access')
 
-  t.equal(sandbox.config.get('foo'), 'baz', 'set the value for foo')
-
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
-  t.ok(contents.includes('foo=baz'), 'wrote foo to disk')
+  const contents = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.equal(rc.access, 'restricted', 'access is set to restricted')
 })
 
-t.test('config set key=value', async t => {
-  const home = t.testdir({
-    '.npmrc': 'foo=bar',
+t.test('config set key value with equals', async t => {
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'access=public',
+    },
   })
 
-  const sandbox = new Sandbox(t, { home })
+  await npm.exec('config', ['set', 'access=restricted'])
 
-  await sandbox.run('config', ['set', 'foo=baz'])
+  t.equal(npm.config.get('access'), 'restricted', 'set the value for access')
 
-  t.equal(sandbox.config.get('foo'), 'baz', 'set the value for foo')
-
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
-  t.ok(contents.includes('foo=baz'), 'wrote foo to disk')
+  const contents = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.equal(rc.access, 'restricted', 'access is set to restricted')
 })
 
 t.test('config set key1 value1 key2=value2 key3', async t => {
-  const home = t.testdir({
-    '.npmrc': 'foo=bar\nbar=baz\nbaz=foo',
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'access=public\nall=true\naudit=true',
+    },
   })
 
-  const sandbox = new Sandbox(t, { home })
-  await sandbox.run('config', ['set', 'foo', 'oof', 'bar=rab', 'baz'])
+  await npm.exec('config', ['set', 'access', 'restricted', 'all=false', 'audit'])
 
-  t.equal(sandbox.config.get('foo'), 'oof', 'foo was set')
-  t.equal(sandbox.config.get('bar'), 'rab', 'bar was set')
-  t.equal(sandbox.config.get('baz'), '', 'baz was set')
+  t.equal(npm.config.get('access'), 'restricted', 'access was set')
+  t.equal(npm.config.get('all'), false, 'all was set')
+  t.equal(npm.config.get('audit'), true, 'audit was unset and restored to its default')
 
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
-  t.ok(contents.includes('foo=oof'), 'foo was written to disk')
-  t.ok(contents.includes('bar=rab'), 'bar was written to disk')
-  t.ok(contents.includes('baz='), 'baz was written to disk')
+  const contents = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.equal(rc.access, 'restricted', 'access is set to restricted')
+  t.equal(rc.all, false, 'all is set to false')
+  t.not(contents.includes('audit='), 'config file does not set audit')
 })
 
 t.test('config set invalid key logs warning', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm, logs, home } = await loadMockNpm(t)
 
   // this doesn't reject, it only logs a warning
-  await sandbox.run('config', ['set', 'access=foo'])
-  t.match(
-    sandbox.logs.warn,
-    [['invalid config', 'access="foo"', `set in ${join(sandbox.home, '.npmrc')}`]],
+  await npm.exec('config', ['set', 'access=foo'])
+  t.equal(logs.warn[0],
+    `invalid config access="foo" set in ${join(home, '.npmrc')}`,
     'logged warning'
   )
 })
 
 t.test('config set key=value --location=global', async t => {
-  const global = t.testdir({
-    npmrc: 'foo=bar\nbar=baz',
+  const { npm, globalPrefix } = await loadMockNpm(t, {
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'access=public\nall=true',
+      },
+    },
+    config: {
+      location: 'global',
+    },
   })
 
-  const sandbox = new Sandbox(t, { global })
-  await sandbox.run('config', ['set', 'foo=buzz', '--location=global'])
+  await npm.exec('config', ['set', 'access=restricted'])
 
-  t.equal(sandbox.config.get('foo', 'global'), 'buzz', 'foo should be set')
+  t.equal(npm.config.get('access', 'global'), 'restricted', 'foo should be set')
 
-  const contents = await readFile(join(global, 'npmrc'), { encoding: 'utf8' })
-  t.not(contents.includes('foo=buzz'), 'foo was saved on disk')
+  const contents = await fs.readFile(join(globalPrefix, 'etc/npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.equal(rc.access, 'restricted', 'access is set to restricted')
 })
 
 t.test('config set key=value --global', async t => {
-  const global = t.testdir({
-    npmrc: 'foo=bar\nbar=baz',
+  const { npm, globalPrefix } = await loadMockNpm(t, {
+    globalPrefixDir: {
+      etc: {
+        npmrc: 'access=public\nall=true',
+      },
+    },
+    config: {
+      global: true,
+    },
   })
 
-  const sandbox = new Sandbox(t, { global })
-  await sandbox.run('config', ['set', 'foo=buzz', '--global'])
+  await npm.exec('config', ['set', 'access=restricted'])
 
-  t.equal(sandbox.config.get('foo', 'global'), 'buzz', 'foo should be set')
+  t.equal(npm.config.get('access', 'global'), 'restricted', 'access should be set')
 
-  const contents = await readFile(join(global, 'npmrc'), { encoding: 'utf8' })
-  t.not(contents.includes('foo=buzz'), 'foo was saved on disk')
+  const contents = await fs.readFile(join(globalPrefix, 'etc/npmrc'), { encoding: 'utf8' })
+  const rc = ini.parse(contents)
+  t.equal(rc.access, 'restricted', 'access is set to restricted')
 })
 
 t.test('config get no args', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm, joinedOutput, clearOutput } = await loadMockNpm(t)
 
-  await sandbox.run('config', ['get'])
-  const getOutput = sandbox.output
+  await npm.exec('config', ['get'])
+  const getOutput = joinedOutput()
 
-  sandbox.reset()
-
-  await sandbox.run('config', ['list'])
-  const listOutput = sandbox.output
+  clearOutput()
+  await npm.exec('config', ['list'])
+  const listOutput = joinedOutput()
 
   t.equal(listOutput, getOutput, 'get with no args outputs list')
 })
 
 t.test('config get single key', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm, joinedOutput } = await loadMockNpm(t)
 
-  await sandbox.run('config', ['get', 'node-version'])
-  t.equal(sandbox.output, sandbox.config.get('node-version'), 'should get the value')
+  await npm.exec('config', ['get', 'all'])
+  t.equal(joinedOutput(), `${npm.config.get('all')}`, 'should get the value')
 })
 
 t.test('config get multiple keys', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm, joinedOutput } = await loadMockNpm(t)
 
-  await sandbox.run('config', ['get', 'node-version', 'npm-version'])
-  t.ok(
-    sandbox.output.includes(`node-version=${sandbox.config.get('node-version')}`),
-    'outputs node-version'
-  )
-  t.ok(
-    sandbox.output.includes(`npm-version=${sandbox.config.get('npm-version')}`),
-    'outputs npm-version'
-  )
+  await npm.exec('config', ['get', 'yes', 'all'])
+  t.equal(joinedOutput(), `yes=${npm.config.get('yes')}\nall=${npm.config.get('all')}`)
 })
 
 t.test('config get private key', async t => {
-  const sandbox = new Sandbox(t)
+  const { npm } = await loadMockNpm(t)
 
   await t.rejects(
-    sandbox.run('config', ['get', '_authToken']),
+    npm.exec('config', ['get', '_authToken']),
     /_authToken option is protected/,
     'rejects with protected string'
   )
 
   await t.rejects(
-    sandbox.run('config', ['get', '//localhost:8080/:_password']),
+    npm.exec('config', ['get', 'authToken']),
+    /authToken option is protected/,
+    'rejects with protected string'
+  )
+
+  await t.rejects(
+    npm.exec('config', ['get', '//localhost:8080/:_password']),
     /_password option is protected/,
     'rejects with protected string'
   )
 })
 
-t.test('config edit', async t => {
-  const home = t.testdir({
-    '.npmrc': 'foo=bar\nbar=baz',
-  })
+t.test('config redacted values', async t => {
+  const { npm, joinedOutput, clearOutput } = await loadMockNpm(t)
 
+  await npm.exec('config', ['set', 'proxy', 'https://proxy.npmjs.org/'])
+  await npm.exec('config', ['get', 'proxy'])
+
+  t.equal(joinedOutput(), 'https://proxy.npmjs.org/')
+  clearOutput()
+
+  await npm.exec('config', ['set', 'proxy', 'https://u:password@proxy.npmjs.org/'])
+
+  await t.rejects(npm.exec('config', ['get', 'proxy']), /proxy option is protected/)
+
+  await npm.exec('config', ['ls'])
+
+  t.match(joinedOutput(), 'proxy = "https://u:***@proxy.npmjs.org/"')
+  clearOutput()
+})
+
+t.test('config edit', async t => {
   const EDITOR = 'vim'
   const editor = spawk.spawn(EDITOR).exit(0)
 
-  const sandbox = new Sandbox(t, { home })
-  sandbox.process.env.EDITOR = EDITOR
-  await sandbox.run('config', ['edit'])
+  const { npm, home } = await loadMockNpm(t, {
+    homeDir: {
+      '.npmrc': 'foo=bar\nbar=baz',
+    },
+    config: {
+      editor: EDITOR,
+    },
+  })
+
+  await npm.exec('config', ['edit'])
 
   t.ok(editor.called, 'editor was spawned')
   t.same(
     editor.calledWith.args,
-    [join(sandbox.home, '.npmrc')],
+    [join(home, '.npmrc')],
     'editor opened the user config file'
   )
 
-  const contents = await readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+  const contents = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
   t.ok(contents.includes('foo=bar'), 'kept foo')
   t.ok(contents.includes('bar=baz'), 'kept bar')
   t.ok(contents.includes('shown below with default values'), 'appends defaults to file')
@@ -393,10 +556,14 @@ t.test('config edit - editor exits non-0', async t => {
   const EDITOR = 'vim'
   const editor = spawk.spawn(EDITOR).exit(1)
 
-  const sandbox = new Sandbox(t)
-  sandbox.process.env.EDITOR = EDITOR
+  const { npm, home } = await loadMockNpm(t, {
+    config: {
+      editor: EDITOR,
+    },
+  })
+
   await t.rejects(
-    sandbox.run('config', ['edit']),
+    npm.exec('config', ['edit']),
     {
       message: 'editor process exited with code: 1',
     },
@@ -406,37 +573,143 @@ t.test('config edit - editor exits non-0', async t => {
   t.ok(editor.called, 'editor was spawned')
   t.same(
     editor.calledWith.args,
-    [join(sandbox.home, '.npmrc')],
+    [join(home, '.npmrc')],
     'editor opened the user config file'
   )
 })
 
-t.test('completion', async t => {
-  const sandbox = new Sandbox(t)
+t.test('config fix', (t) => {
+  t.test('no problems', async (t) => {
+    const { npm, joinedOutput } = await loadMockNpm(t, {
+      homeDir: {
+        '.npmrc': '',
+      },
+    })
 
-  let allKeys
-  const testComp = async (argv, expect) => {
-    t.match(await sandbox.complete('config', argv), expect, argv.join(' '))
-    if (!allKeys) {
-      allKeys = Object.keys(sandbox.config.definitions)
-    }
-    sandbox.reset()
+    await npm.exec('config', ['fix'])
+    t.equal(joinedOutput(), '', 'printed nothing')
+  })
+
+  t.test('repairs all configs by default', async (t) => {
+    const { npm, home, globalPrefix, joinedOutput } = await loadMockNpm(t, {
+      globalPrefixDir: {
+        etc: {
+          npmrc: '_authtoken=notatoken\n_authToken=afaketoken',
+        },
+      },
+      homeDir: {
+        '.npmrc': '_authtoken=thisisinvalid\n_auth=beef',
+      },
+    })
+
+    const registry = `//registry.npmjs.org/`
+
+    await npm.exec('config', ['fix'])
+
+    // global config fixes
+    t.match(joinedOutput(), '`_authtoken` deleted from global config',
+      'output has deleted global _authtoken')
+    t.match(joinedOutput(), `\`_authToken\` renamed to \`${registry}:_authToken\` in global config`,
+      'output has renamed global _authToken')
+    t.not(npm.config.get('_authtoken', 'global'), '_authtoken is not set globally')
+    t.not(npm.config.get('_authToken', 'global'), '_authToken is not set globally')
+    t.equal(npm.config.get(`${registry}:_authToken`, 'global'), 'afaketoken',
+      'global _authToken was scoped')
+    const globalConfig = await fs.readFile(join(globalPrefix, 'etc/npmrc'), { encoding: 'utf8' })
+    t.equal(globalConfig, `${registry}:_authToken=afaketoken\n`, 'global config was written')
+
+    // user config fixes
+    t.match(joinedOutput(), '`_authtoken` deleted from user config',
+      'output has deleted user _authtoken')
+    t.match(joinedOutput(), `\`_auth\` renamed to \`${registry}:_auth\` in user config`,
+      'output has renamed user _auth')
+    t.not(npm.config.get('_authtoken', 'user'), '_authtoken is not set in user config')
+    t.not(npm.config.get('_auth'), '_auth is not set in user config')
+    t.equal(npm.config.get(`${registry}:_auth`, 'user'), 'beef', 'user _auth was scoped')
+    const userConfig = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+    t.equal(userConfig, `${registry}:_auth=beef\n`, 'user config was written')
+  })
+
+  t.test('repairs only the config specified by --location if asked', async (t) => {
+    const { npm, home, globalPrefix, joinedOutput } = await loadMockNpm(t, {
+      globalPrefixDir: {
+        etc: {
+          npmrc: '_authtoken=notatoken\n_authToken=afaketoken',
+        },
+      },
+      homeDir: {
+        '.npmrc': '_authtoken=thisisinvalid\n_auth=beef',
+      },
+      config: {
+        location: 'user',
+      },
+    })
+    const registry = `//registry.npmjs.org/`
+
+    await npm.exec('config', ['fix'])
+
+    // global config should be untouched
+    t.notMatch(joinedOutput(), '`_authtoken` deleted from global',
+      'output has deleted global _authtoken')
+    t.notMatch(joinedOutput(), `\`_authToken\` renamed to \`${registry}:_authToken\` in global`,
+      'output has renamed global _authToken')
+    t.equal(npm.config.get('_authtoken', 'global'), 'notatoken', 'global _authtoken untouched')
+    t.equal(npm.config.get('_authToken', 'global'), 'afaketoken', 'global _authToken untouched')
+    t.not(npm.config.get(`${registry}:_authToken`, 'global'), 'global _authToken not scoped')
+    const globalConfig = await fs.readFile(join(globalPrefix, 'etc/npmrc'), { encoding: 'utf8' })
+    t.equal(globalConfig, '_authtoken=notatoken\n_authToken=afaketoken',
+      'global config was not written')
+
+    // user config fixes
+    t.match(joinedOutput(), '`_authtoken` deleted from user',
+      'output has deleted user _authtoken')
+    t.match(joinedOutput(), `\`_auth\` renamed to \`${registry}:_auth\` in user`,
+      'output has renamed user _auth')
+    t.not(npm.config.get('_authtoken', 'user'), '_authtoken is not set in user config')
+    t.not(npm.config.get('_auth', 'user'), '_auth is not set in user config')
+    t.equal(npm.config.get(`${registry}:_auth`, 'user'), 'beef', 'user _auth was scoped')
+    const userConfig = await fs.readFile(join(home, '.npmrc'), { encoding: 'utf8' })
+    t.equal(userConfig, `${registry}:_auth=beef\n`, 'user config was written')
+  })
+
+  t.end()
+})
+
+t.test('completion', async t => {
+  const { config, npm } = await loadMockNpm(t, { command: 'config' })
+
+  const allKeys = Object.keys(npm.config.definitions)
+
+  const testComp = async (argv, expect, msg) => {
+    const options = Array.isArray(argv) ? {
+      conf: {
+        argv: {
+          remain: ['config', ...argv],
+        },
+      },
+    } : argv
+    options.conf.argv.remain.unshift('npm')
+    const res = await config.completion(options)
+    t.strictSame(res, expect, msg ?? argv.join(' '))
   }
 
-  await testComp([], ['get', 'set', 'delete', 'ls', 'rm', 'edit', 'list'])
+  await testComp([], ['get', 'set', 'delete', 'ls', 'rm', 'edit', 'fix', 'list'])
   await testComp(['set', 'foo'], [])
   await testComp(['get'], allKeys)
   await testComp(['set'], allKeys)
   await testComp(['delete'], allKeys)
   await testComp(['rm'], allKeys)
   await testComp(['edit'], [])
+  await testComp(['fix'], [])
   await testComp(['list'], [])
   await testComp(['ls'], [])
 
-  const getCommand = await sandbox.complete('get')
-  t.match(getCommand, allKeys, 'also works for just npm get')
-  sandbox.reset()
+  await testComp({
+    conf: { argv: { remain: ['get'] } },
+  }, allKeys, 'also works for just npm get')
 
-  const partial = await sandbox.complete('config', 'l')
-  t.match(partial, ['get', 'set', 'delete', 'ls', 'rm', 'edit'], 'and works on partials')
+  await testComp({
+    partialWord: 'l',
+    conf: { argv: { remain: ['config'] } },
+  }, ['get', 'set', 'delete', 'ls', 'rm', 'edit', 'fix'], 'and works on partials')
 })

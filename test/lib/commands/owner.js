@@ -1,8 +1,8 @@
 const t = require('tap')
 const { load: loadMockNpm } = require('../../fixtures/mock-npm.js')
-const MockRegistry = require('../../fixtures/mock-registry.js')
+const MockRegistry = require('@npmcli/mock-registry')
 
-const path = require('path')
+const path = require('node:path')
 const npa = require('npm-package-arg')
 const packageName = '@npmcli/test-package'
 const spec = npa(packageName)
@@ -123,7 +123,7 @@ t.test('owner ls fails to retrieve packument', async t => {
   })
   registry.nock.get(`/${spec.escapedName}`).reply(404)
   await t.rejects(npm.exec('owner', ['ls']))
-  t.match(logs.error, [['owner ls', "Couldn't get owner data", '@npmcli/test-package']])
+  t.match(logs.error.byTitle('owner ls'), [`owner ls Couldn't get owner data @npmcli/test-package`])
 })
 
 t.test('owner ls <pkg>', async t => {
@@ -240,8 +240,8 @@ t.test('owner add <user> <pkg> already an owner', async t => {
   await npm.exec('owner', ['add', username, packageName])
   t.equal(joinedOutput(), '')
   t.match(
-    logs.info,
-    [['owner add', 'Already a package owner: test-user-a <test-user-a@npmjs.org>']]
+    logs.info.byTitle('owner add'),
+    [`Already a package owner: test-user-a <test-user-a@npmjs.org>`]
   )
 })
 
@@ -256,7 +256,7 @@ t.test('owner add <user> <pkg> fails to retrieve user', async t => {
   })
   registry.couchuser({ username, responseCode: 404, body: {} })
   await t.rejects(npm.exec('owner', ['add', username, packageName]))
-  t.match(logs.error, [['owner mutate', `Error getting user data for ${username}`]])
+  t.match(logs.error.byTitle('owner mutate'), [`Error getting user data for ${username}`])
 })
 
 t.test('owner add <user> <pkg> fails to PUT updates', async t => {
@@ -380,7 +380,7 @@ t.test('owner rm <user> <pkg> not a current owner', async t => {
   registry.couchuser({ username })
   await registry.package({ manifest })
   await npm.exec('owner', ['rm', username, packageName])
-  t.match(logs.info, [['owner rm', `Not a package owner: ${username}`]])
+  t.match(logs.info.byTitle('owner rm'), [`Not a package owner: ${username}`])
 })
 
 t.test('owner rm <user> cwd package', async t => {
@@ -470,8 +470,10 @@ t.test('workspaces', async t => {
   t.test('owner no args --workspace', async t => {
     const { npm } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
+      config: {
+        workspace: 'workspace-a',
+      },
     })
-    npm.config.set('workspace', ['workspace-a'])
     await t.rejects(
       npm.exec('owner', []),
       { code: 'EUSAGE' },
@@ -482,9 +484,7 @@ t.test('workspaces', async t => {
   t.test('owner ls implicit workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
-      globals: ({ prefix }) => ({
-        'process.cwd': () => path.join(prefix, 'workspace-a'),
-      }),
+      chdir: ({ prefix }) => path.join(prefix, 'workspace-a'),
     })
     await registryPackage(t, npm.config.get('registry'), 'workspace-a')
     await npm.exec('owner', ['ls'])
@@ -494,11 +494,10 @@ t.test('workspaces', async t => {
   t.test('owner ls explicit workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
-      globals: ({ prefix }) => ({
-        'process.cwd': () => prefix,
-      }),
+      config: {
+        workspace: 'workspace-a',
+      },
     })
-    npm.config.set('workspace', ['workspace-a'])
     await registryPackage(t, npm.config.get('registry'), 'workspace-a')
     await npm.exec('owner', ['ls'])
     t.match(joinedOutput(), maintainers.map(m => `${m.name} <${m.email}>`).join('\n'))
@@ -507,9 +506,7 @@ t.test('workspaces', async t => {
   t.test('owner ls <pkg> implicit workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
-      globals: ({ prefix }) => ({
-        'process.cwd': () => path.join(prefix, 'workspace-a'),
-      }),
+      chdir: ({ prefix }) => path.join(prefix, 'workspace-a'),
     })
     await registryPackage(t, npm.config.get('registry'), packageName)
     await npm.exec('owner', ['ls', packageName])
@@ -519,11 +516,10 @@ t.test('workspaces', async t => {
   t.test('owner ls <pkg> explicit workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
-      globals: ({ prefix }) => ({
-        'process.cwd': () => prefix,
-      }),
+      config: {
+        workspace: 'workspace-a',
+      },
     })
-    npm.config.set('workspace', ['workspace-a'])
     await registryPackage(t, npm.config.get('registry'), packageName)
     await npm.exec('owner', ['ls', packageName])
     t.match(joinedOutput(), maintainers.map(m => `${m.name} <${m.email}>`).join('\n'))
@@ -532,9 +528,7 @@ t.test('workspaces', async t => {
   t.test('owner add implicit workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
-      globals: ({ prefix }) => ({
-        'process.cwd': () => path.join(prefix, 'workspace-a'),
-      }),
+      chdir: ({ prefix }) => path.join(prefix, 'workspace-a'),
     })
     const username = 'foo'
     const registry = new MockRegistry({ tap: t, registry: npm.config.get('registry') })
@@ -563,8 +557,10 @@ t.test('workspaces', async t => {
   t.test('owner add --workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
+      config: {
+        workspace: 'workspace-a',
+      },
     })
-    npm.config.set('workspace', ['workspace-a'])
     const username = 'foo'
     const registry = new MockRegistry({ tap: t, registry: npm.config.get('registry') })
 
@@ -592,9 +588,7 @@ t.test('workspaces', async t => {
   t.test('owner rm --workspace', async t => {
     const { npm, joinedOutput } = await loadMockNpm(t, {
       prefixDir: workspaceFixture,
-      globals: ({ prefix }) => ({
-        'process.cwd': () => path.join(prefix, 'workspace-a'),
-      }),
+      chdir: ({ prefix }) => path.join(prefix, 'workspace-a'),
     })
     const registry = new MockRegistry({ tap: t, registry: npm.config.get('registry') })
 
@@ -619,9 +613,10 @@ t.test('workspaces', async t => {
 })
 
 t.test('completion', async t => {
+  const mockCompletion = (t, opts) => loadMockNpm(t, { command: 'owner', ...opts })
+
   t.test('basic commands', async t => {
-    const { npm } = await loadMockNpm(t)
-    const owner = await npm.cmd('owner')
+    const { owner } = await mockCompletion(t)
     const testComp = async (argv, expect) => {
       const res = await owner.completion({ conf: { argv: { remain: argv } } })
       t.strictSame(res, expect, argv.join(' '))
@@ -637,10 +632,9 @@ t.test('completion', async t => {
   })
 
   t.test('completion npm owner rm', async t => {
-    const { npm } = await loadMockNpm(t, {
+    const { npm, owner } = await mockCompletion(t, {
       prefixDir: { 'package.json': JSON.stringify({ name: packageName }) },
     })
-    const owner = await npm.cmd('owner')
     const registry = new MockRegistry({
       tap: t,
       registry: npm.config.get('registry'),
@@ -655,26 +649,23 @@ t.test('completion', async t => {
   })
 
   t.test('completion npm owner rm no cwd package', async t => {
-    const { npm } = await loadMockNpm(t)
-    const owner = await npm.cmd('owner')
+    const { owner } = await mockCompletion(t)
     const res = await owner.completion({ conf: { argv: { remain: ['npm', 'owner', 'rm'] } } })
     t.strictSame(res, [], 'should have no owners to autocomplete if not cwd package')
   })
 
   t.test('completion npm owner rm global', async t => {
-    const { npm } = await loadMockNpm(t, {
+    const { owner } = await mockCompletion(t, {
       config: { global: true },
     })
-    const owner = await npm.cmd('owner')
     const res = await owner.completion({ conf: { argv: { remain: ['npm', 'owner', 'rm'] } } })
     t.strictSame(res, [], 'should have no owners to autocomplete if global')
   })
 
   t.test('completion npm owner rm no owners found', async t => {
-    const { npm } = await loadMockNpm(t, {
+    const { npm, owner } = await mockCompletion(t, {
       prefixDir: { 'package.json': JSON.stringify({ name: packageName }) },
     })
-    const owner = await npm.cmd('owner')
     const registry = new MockRegistry({
       tap: t,
       registry: npm.config.get('registry'),

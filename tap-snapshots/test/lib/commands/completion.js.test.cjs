@@ -7,12 +7,10 @@
 'use strict'
 exports[`test/lib/commands/completion.js TAP completion --no- flags > flags 1`] = `
 Array [
-  Array [
-    String(
-      --no-version
-      --no-versions
-    ),
-  ],
+  String(
+    --no-version
+    --no-versions
+  ),
 ]
 `
 
@@ -42,197 +40,178 @@ Array []
 
 exports[`test/lib/commands/completion.js TAP completion double dashes escape from flag completion > full command list 1`] = `
 Array [
-  Array [
-    String(
-      access
-      adduser
-      audit
-      bin
-      bugs
-      cache
-      ci
-      completion
-      config
-      dedupe
-      deprecate
-      diff
-      dist-tag
-      docs
-      doctor
-      edit
-      exec
-      explain
-      explore
-      find-dupes
-      fund
-      get
-      help
-      hook
-      init
-      install
-      install-ci-test
-      install-test
-      link
-      ll
-      login
-      logout
-      ls
-      org
-      outdated
-      owner
-      pack
-      ping
-      pkg
-      prefix
-      profile
-      prune
-      publish
-      query
-      rebuild
-      repo
-      restart
-      root
-      run-script
-      search
-      set
-      set-script
-      shrinkwrap
-      star
-      stars
-      start
-      stop
-      team
-      test
-      token
-      uninstall
-      unpublish
-      unstar
-      update
-      version
-      view
-      whoami
-      login
-      author
-      home
-      issues
-      info
-      show
-      find
-      add
-      unlink
-      remove
-      rm
-      r
-      un
-      rb
-      list
-      ln
-      create
-      i
-      it
-      cit
-      up
-      c
-      s
-      se
-      tst
-      t
-      ddp
-      v
-      run
-      clean-install
-      clean-install-test
-      x
-      why
-      la
-      verison
-      ic
-      innit
-      in
-      ins
-      inst
-      insta
-      instal
-      isnt
-      isnta
-      isntal
-      isntall
-      install-clean
-      isntall-clean
-      hlep
-      dist-tags
-      upgrade
-      udpate
-      rum
-      sit
-      urn
-      ogr
-      add-user
-    ),
-  ],
+  String(
+    access
+    adduser
+    audit
+    bugs
+    cache
+    ci
+    completion
+    config
+    dedupe
+    deprecate
+    diff
+    dist-tag
+    docs
+    doctor
+    edit
+    exec
+    explain
+    explore
+    find-dupes
+    fund
+    get
+    help
+    help-search
+    init
+    install
+    install-ci-test
+    install-test
+    link
+    ll
+    login
+    logout
+    ls
+    org
+    outdated
+    owner
+    pack
+    ping
+    pkg
+    prefix
+    profile
+    prune
+    publish
+    query
+    rebuild
+    repo
+    restart
+    root
+    run-script
+    sbom
+    search
+    set
+    shrinkwrap
+    star
+    stars
+    start
+    stop
+    team
+    test
+    token
+    undeprecate
+    uninstall
+    unpublish
+    unstar
+    update
+    version
+    view
+    whoami
+    author
+    home
+    issues
+    info
+    show
+    find
+    add
+    unlink
+    remove
+    rm
+    r
+    un
+    rb
+    list
+    ln
+    create
+    i
+    it
+    cit
+    up
+    c
+    s
+    se
+    tst
+    t
+    ddp
+    v
+    run
+    clean-install
+    clean-install-test
+    x
+    why
+    la
+    verison
+    ic
+    innit
+    in
+    ins
+    inst
+    insta
+    instal
+    isnt
+    isnta
+    isntal
+    isntall
+    install-clean
+    isntall-clean
+    hlep
+    dist-tags
+    upgrade
+    udpate
+    rum
+    sit
+    urn
+    ogr
+    add-user
+  ),
 ]
 `
 
 exports[`test/lib/commands/completion.js TAP completion filtered subcommands > filtered subcommands 1`] = `
-Array [
-  Array [
-    "public",
-  ],
-]
+Array []
 `
 
 exports[`test/lib/commands/completion.js TAP completion flags > flags 1`] = `
 Array [
-  Array [
-    String(
-      --version
-      --versions
-      --viewer
-      --verbose
-      --v
-    ),
-  ],
+  String(
+    --version
+    --versions
+    --viewer
+    --verbose
+    --v
+  ),
 ]
 `
 
 exports[`test/lib/commands/completion.js TAP completion multiple command names > multiple command names 1`] = `
 Array [
-  Array [
-    String(
-      access
-      adduser
-      audit
-      author
-      add
-      add-user
-    ),
-  ],
+  String(
+    access
+    adduser
+    audit
+    author
+    add
+    add-user
+  ),
 ]
 `
 
 exports[`test/lib/commands/completion.js TAP completion single command name > single command name 1`] = `
 Array [
-  Array [
-    "config",
-  ],
+  "config",
 ]
 `
 
 exports[`test/lib/commands/completion.js TAP completion subcommand completion > subcommands 1`] = `
 Array [
-  Array [
-    String(
-      public
-      restricted
-      grant
-      revoke
-      ls-packages
-      ls-collaborators
-      edit
-      2fa-required
-      2fa-not-required
-    ),
-  ],
+  String(
+    get
+    grant
+    list
+    revoke
+    set
+  ),
 ]
 `
 

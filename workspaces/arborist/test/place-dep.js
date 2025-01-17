@@ -39,14 +39,12 @@ t.test('placement tests', t => {
       updateNames = [],
       // an audit report, telling us which nodes are vulnerable
       auditReport = null,
-      // --legacy-bundling set?
-      legacyBundling = false,
       // --strict-peer-deps set?
       strictPeerDeps = false,
       // --legacy-peer-deps set?
       legacyPeerDeps = false,
       // installing with --global or --global-style?
-      globalStyle = false,
+      installStrategy = 'hoisted',
     } = options
 
     const node = tree.inventory.get(nodeLoc)
@@ -80,10 +78,9 @@ t.test('placement tests', t => {
         explicitRequest,
         updateNames,
         auditReport,
-        legacyBundling,
         strictPeerDeps,
         legacyPeerDeps,
-        globalStyle,
+        installStrategy,
       })
     }
 
@@ -130,7 +127,7 @@ t.test('placement tests', t => {
       try {
         pd = place()
       } catch (er) {
-        console.error(require('util').inspect(er, { depth: Infinity }))
+        console.error(require('node:util').inspect(er, { depth: Infinity }))
         throw er
       }
       process.removeListener('log', onwarn)
@@ -271,7 +268,7 @@ t.test('placement tests', t => {
     }),
     dep: new Node({ pkg: { name: 'bar', version: '1.0.0' } }),
     nodeLoc: 'node_modules/foo',
-    legacyBundling: true,
+    installStrategy: 'nested',
     test: (t, tree) => {
       const foobar = tree.children.get('foo').resolve('bar')
       t.equal(foobar.location, 'node_modules/foo/node_modules/bar')
@@ -291,7 +288,7 @@ t.test('placement tests', t => {
     }),
     dep: new Node({ pkg: { name: 'bar', version: '1.0.0' } }),
     nodeLoc: 'node_modules/foo',
-    globalStyle: true,
+    installStrategy: 'shallow',
     test: (t, tree) => {
       const foobar = tree.children.get('foo').resolve('bar')
       t.equal(foobar.location, 'node_modules/foo/node_modules/bar')
@@ -323,7 +320,7 @@ t.test('placement tests', t => {
     }),
     dep: new Node({ pkg: { name: 'baz', version: '1.0.0' } }),
     nodeLoc: 'node_modules/foo/node_modules/bar',
-    globalStyle: true,
+    installStrategy: 'shallow',
     test: (t, tree) => {
       const foobar = tree.children.get('foo').resolve('bar')
       const foobarbaz = foobar.resolve('baz')

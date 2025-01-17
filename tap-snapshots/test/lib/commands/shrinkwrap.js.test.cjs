@@ -22,7 +22,8 @@ exports[`test/lib/commands/shrinkwrap.js TAP with hidden lockfile ancient > must
   },
   "logs": [
     "created a lockfile as npm-shrinkwrap.json"
-  ]
+  ],
+  "warn": []
 }
 `
 
@@ -46,6 +47,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with hidden lockfile ancient upgrad
   },
   "logs": [
     "created a lockfile as npm-shrinkwrap.json with version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v1 -> v3"
   ]
 }
 `
@@ -68,7 +72,8 @@ exports[`test/lib/commands/shrinkwrap.js TAP with hidden lockfile existing > mus
   },
   "logs": [
     "created a lockfile as npm-shrinkwrap.json"
-  ]
+  ],
+  "warn": []
 }
 `
 
@@ -91,6 +96,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with hidden lockfile existing downg
   },
   "logs": [
     "created a lockfile as npm-shrinkwrap.json with version 1"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v2 -> v1"
   ]
 }
 `
@@ -115,6 +123,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with hidden lockfile existing upgra
   },
   "logs": [
     "created a lockfile as npm-shrinkwrap.json with version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v2 -> v3"
   ]
 }
 `
@@ -125,13 +136,14 @@ exports[`test/lib/commands/shrinkwrap.js TAP with nothing ancient > must match s
   "config": {},
   "shrinkwrap": {
     "name": "prefix",
-    "lockfileVersion": 2,
+    "lockfileVersion": 3,
     "requires": true,
     "packages": {}
   },
   "logs": [
-    "created a lockfile as npm-shrinkwrap.json with version 2"
-  ]
+    "created a lockfile as npm-shrinkwrap.json with version 3"
+  ],
+  "warn": []
 }
 `
 
@@ -149,7 +161,8 @@ exports[`test/lib/commands/shrinkwrap.js TAP with nothing ancient upgrade > must
   },
   "logs": [
     "created a lockfile as npm-shrinkwrap.json with version 3"
-  ]
+  ],
+  "warn": []
 }
 `
 
@@ -163,7 +176,7 @@ exports[`test/lib/commands/shrinkwrap.js TAP with npm-shrinkwrap.json ancient > 
   "config": {},
   "shrinkwrap": {
     "name": "prefix",
-    "lockfileVersion": 2,
+    "lockfileVersion": 3,
     "requires": true,
     "packages": {
       "": {
@@ -172,7 +185,10 @@ exports[`test/lib/commands/shrinkwrap.js TAP with npm-shrinkwrap.json ancient > 
     }
   },
   "logs": [
-    "npm-shrinkwrap.json updated to version 2"
+    "npm-shrinkwrap.json updated to version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v1 -> v3"
   ]
 }
 `
@@ -199,6 +215,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with npm-shrinkwrap.json ancient up
   },
   "logs": [
     "npm-shrinkwrap.json updated to version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v1 -> v3"
   ]
 }
 `
@@ -223,7 +242,8 @@ exports[`test/lib/commands/shrinkwrap.js TAP with npm-shrinkwrap.json existing >
   },
   "logs": [
     "npm-shrinkwrap.json up to date"
-  ]
+  ],
+  "warn": []
 }
 `
 
@@ -244,6 +264,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with npm-shrinkwrap.json existing d
   },
   "logs": [
     "npm-shrinkwrap.json updated to version 1"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v2 -> v1"
   ]
 }
 `
@@ -270,6 +293,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with npm-shrinkwrap.json existing u
   },
   "logs": [
     "npm-shrinkwrap.json updated to version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v2 -> v3"
   ]
 }
 `
@@ -284,7 +310,7 @@ exports[`test/lib/commands/shrinkwrap.js TAP with package-lock.json ancient > mu
   "config": {},
   "shrinkwrap": {
     "name": "prefix",
-    "lockfileVersion": 2,
+    "lockfileVersion": 3,
     "requires": true,
     "packages": {
       "": {
@@ -293,7 +319,10 @@ exports[`test/lib/commands/shrinkwrap.js TAP with package-lock.json ancient > mu
     }
   },
   "logs": [
-    "package-lock.json has been renamed to npm-shrinkwrap.json and updated to version 2"
+    "package-lock.json has been renamed to npm-shrinkwrap.json and updated to version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v1 -> v3"
   ]
 }
 `
@@ -320,6 +349,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with package-lock.json ancient upgr
   },
   "logs": [
     "package-lock.json has been renamed to npm-shrinkwrap.json and updated to version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v1 -> v3"
   ]
 }
 `
@@ -344,7 +376,8 @@ exports[`test/lib/commands/shrinkwrap.js TAP with package-lock.json existing > m
   },
   "logs": [
     "package-lock.json has been renamed to npm-shrinkwrap.json"
-  ]
+  ],
+  "warn": []
 }
 `
 
@@ -365,6 +398,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with package-lock.json existing dow
   },
   "logs": [
     "package-lock.json has been renamed to npm-shrinkwrap.json and updated to version 1"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v2 -> v1"
   ]
 }
 `
@@ -391,6 +427,9 @@ exports[`test/lib/commands/shrinkwrap.js TAP with package-lock.json existing upg
   },
   "logs": [
     "package-lock.json has been renamed to npm-shrinkwrap.json and updated to version 3"
+  ],
+  "warn": [
+    "shrinkwrap Converting lock file (npm-shrinkwrap.json) from v2 -> v3"
   ]
 }
 `

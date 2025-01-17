@@ -1,4 +1,4 @@
-const util = require('util')
+const util = require('node:util')
 const Edge = require('../lib/edge.js')
 const OverrideSet = require('../lib/override-set.js')
 const t = require('tap')
@@ -226,6 +226,16 @@ t.ok(new Edge({
   spec: '1.x',
   accept: '2.x',
 }).satisfiedBy(c), 'c@2 satisfies spec:1.x, accept:2.x')
+reset(a)
+
+t.equal(
+  (new Edge({
+    from: a,
+    type: 'prod',
+    name: 'c',
+    spec: '1.x',
+    accept: '2.x',
+  })).accept, '2.x', '.accept getter works')
 reset(a)
 
 t.ok(new Edge({

@@ -27,7 +27,7 @@ t.throws(() => {
 }, /saveType/, 'rejects invalid saveType')
 
 t.test('workspace nodes and deps', async t => {
-  const { resolve } = require('path')
+  const { resolve } = require('node:path')
   const fixture = resolve(__dirname, '../fixtures/workspaces-shared-deps-virtual')
   const arb = new Arborist({ path: fixture })
   const tree = await arb.loadVirtual()
@@ -213,7 +213,7 @@ t.test('excludeSet includes nonworkspace metadeps', async t => {
     spec: 'file:pkgs/b',
   })
 
-  const arb = new Arborist()
+  const arb = new Arborist({})
   const filter = arb.excludeWorkspacesDependencySet(tree)
 
   t.equal(filter.size, 3)
@@ -243,5 +243,13 @@ t.test('valid replaceRegistryHost values', t => {
   t.equal(new Arborist({ replaceRegistryHost: undefined }).options.replaceRegistryHost, 'registry.npmjs.org')
   t.equal(new Arborist({ replaceRegistryHost: 'always' }).options.replaceRegistryHost, 'always')
   t.equal(new Arborist({ replaceRegistryHost: 'never' }).options.replaceRegistryHost, 'never')
+  t.end()
+})
+
+t.test('valid global/installStrategy values', t => {
+  t.equal(new Arborist({ global: true }).options.installStrategy, 'shallow')
+  t.equal(new Arborist({ global: false }).options.installStrategy, 'hoisted')
+  t.equal(new Arborist({}).options.installStrategy, 'hoisted')
+  t.equal(new Arborist({ installStrategy: 'hoisted' }).options.installStrategy, 'hoisted')
   t.end()
 })

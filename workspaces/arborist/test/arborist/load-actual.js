@@ -2,10 +2,10 @@ const t = require('tap')
 const { format } = require('tcompare')
 const Arborist = require('../../lib/arborist')
 
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 const Node = require('../../lib/node.js')
 const Shrinkwrap = require('../../lib/shrinkwrap.js')
-const fs = require('fs')
+const fs = require('node:fs')
 
 const {
   fixtures,
@@ -170,37 +170,46 @@ t.test('shake out Link target timing issue', t => {
     t.matchSnapshot(tree, 'loaded tree'))
 })
 
-t.test('broken json', t =>
-  loadActual(resolve(fixtures, 'bad')).then(d => {
-    t.ok(d.errors.length, 'Got an error object')
-    t.equal(d.errors[0] && d.errors[0].code, 'EJSONPARSE')
-    t.ok(d, 'Got a tree')
-  }))
+t.test('broken json', async t => {
+  const d = await loadActual(resolve(fixtures, 'bad'))
+  t.ok(d.errors.length, 'Got an error object')
+  t.equal(d.errors[0] && d.errors[0].code, 'EJSONPARSE')
+  t.ok(d, 'Got a tree')
+})
 
-t.test('missing json does not obscure deeper errors', t =>
-  loadActual(resolve(fixtures, 'empty')).then(d => {
-    t.match(d, { errors: [{ code: 'ENOENT' }] },
-      'Error reading json of top level')
-    t.match(d.children.get('foo'), { errors: [{ code: 'EJSONPARSE' }] },
-      'Error parsing JSON of child node')
-  }))
+t.test('missing json does not obscure deeper errors', async t => {
+  const d = await loadActual(resolve(fixtures, 'empty'))
+  t.match(d, { errors: [{ code: 'ENOENT' }] },
+    'Error reading json of top level')
+  t.match(d.children.get('foo'), { errors: [{ code: 'EJSONPARSE' }] },
+    'Error parsing JSON of child node')
+})
 
 t.test('missing folder', t =>
   t.rejects(loadActual(resolve(fixtures, 'does-not-exist')), {
     code: 'ENOENT',
   }))
 
-t.test('missing symlinks', t =>
-  loadActual(resolve(fixtures, 'badlink')).then(d => {
-    t.equal(d.children.size, 2, 'both broken children are included')
-    t.match(d.children.get('foo'), { errors: [{ code: 'ELOOP' }] },
-      'foo has error')
-    t.match(d.children.get('bar'), { errors: [{ code: 'ENOENT' }] },
-      'bar has error')
-  }))
+t.test('missing symlinks', async t => {
+  const d = await loadActual(resolve(fixtures, 'badlink'))
+  t.equal(d.children.size, 2, 'both broken children are included')
+  t.match(d.children.get('foo'), { errors: [{ code: 'ELOOP' }] },
+    'foo has error')
+  t.match(d.children.get('bar'), { errors: [{ code: 'ENOENT' }] },
+    'bar has error')
+})
 
-t.test('load from a hidden lockfile', t =>
-  t.resolveMatchSnapshot(loadActual(resolve(fixtures, 'hidden-lockfile'))))
+t.test('load from a hidden lockfile', async (t) => {
+  const tree = await loadActual(resolve(fixtures, 'hidden-lockfile'))
+  t.ok(tree.meta.loadedFromDisk, 'meta was loaded from disk')
+  t.matchSnapshot(tree)
+})
+
+t.test('do not load from a hidden lockfile when forceActual is set', async (t) => {
+  const tree = await loadActual(resolve(fixtures, 'hidden-lockfile'), { forceActual: true })
+  t.not(tree.meta.loadedFromDisk, 'meta was NOT loaded from disk')
+  t.matchSnapshot(tree)
+})
 
 t.test('load a global space', t =>
   t.resolveMatchSnapshot(loadActual(resolve(fixtures, 'global-style/lib'), {

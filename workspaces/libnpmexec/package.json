@@ -1,18 +1,18 @@
 {
   "name": "libnpmexec",
-  "version": "4.0.9",
+  "version": "10.0.0",
   "files": [
     "bin/",
     "lib/"
   ],
   "main": "lib/index.js",
   "engines": {
-    "node": "^12.13.0 || ^14.15.0 || >=16.0.0"
+    "node": "^20.17.0 || >=22.9.0"
   },
   "description": "npm exec (npx) programmatic API",
   "repository": {
     "type": "git",
-    "url": "https://github.com/npm/cli.git",
+    "url": "git+https://github.com/npm/cli.git",
     "directory": "workspaces/libnpmexec"
   },
   "keywords": [
@@ -33,45 +33,47 @@
   ],
   "license": "ISC",
   "scripts": {
-    "lint": "eslint \"**/*.js\"",
+    "lint": "npm run eslint",
     "posttest": "npm run lint",
     "test": "tap",
     "snap": "tap",
-    "preversion": "npm test",
-    "postversion": "npm publish",
-    "prepublishOnly": "git push origin --follow-tags",
     "postlint": "template-oss-check",
-    "lintfix": "npm run lint -- --fix",
-    "template-oss-apply": "template-oss-apply --force"
+    "lintfix": "npm run eslint -- --fix",
+    "template-oss-apply": "template-oss-apply --force",
+    "eslint": "eslint \"**/*.{js,cjs,ts,mjs,jsx,tsx}\""
   },
   "tap": {
-    "color": true,
-    "files": "test/*.js"
+    "files": "test/*.js",
+    "nyc-arg": [
+      "--exclude",
+      "tap-snapshots/**"
+    ]
   },
   "devDependencies": {
-    "@npmcli/eslint-config": "^3.0.1",
-    "@npmcli/template-oss": "3.5.0",
-    "bin-links": "^3.0.0",
-    "tap": "^16.0.1"
+    "@npmcli/eslint-config": "^5.0.1",
+    "@npmcli/mock-registry": "^1.0.0",
+    "@npmcli/template-oss": "4.23.6",
+    "bin-links": "^5.0.0",
+    "chalk": "^5.2.0",
+    "just-extend": "^6.2.0",
+    "just-safe-set": "^4.2.1",
+    "tap": "^16.3.8"
   },
   "dependencies": {
-    "@npmcli/arborist": "^5.0.0",
-    "@npmcli/ci-detect": "^2.0.0",
-    "@npmcli/fs": "^2.1.1",
-    "@npmcli/run-script": "^4.2.0",
-    "chalk": "^4.1.0",
-    "mkdirp-infer-owner": "^2.0.0",
-    "npm-package-arg": "^9.0.1",
-    "npmlog": "^6.0.2",
-    "pacote": "^13.6.1",
-    "proc-log": "^2.0.0",
-    "read": "^1.0.7",
-    "read-package-json-fast": "^2.0.2",
+    "@npmcli/arborist": "^9.0.0",
+    "@npmcli/run-script": "^9.0.1",
+    "ci-info": "^4.0.0",
+    "npm-package-arg": "^12.0.0",
+    "pacote": "^21.0.0",
+    "proc-log": "^5.0.0",
+    "read": "^4.0.0",
+    "read-package-json-fast": "^4.0.0",
     "semver": "^7.3.7",
-    "walk-up-path": "^1.0.0"
+    "walk-up-path": "^4.0.0"
   },
   "templateOSS": {
     "//@npmcli/template-oss": "This file is partially managed by @npmcli/template-oss. Edits may be overwritten.",
-    "version": "3.5.0"
+    "version": "4.23.6",
+    "content": "../../scripts/template-oss/index.js"
   }
 }

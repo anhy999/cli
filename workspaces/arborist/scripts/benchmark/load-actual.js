@@ -1,14 +1,14 @@
 const Arborist = require('../..')
-const { resolve, basename } = require('path')
-const { writeFileSync } = require('fs')
-const mkdirp = require('mkdirp')
+const { resolve, basename } = require('node:path')
+const { writeFileSync } = require('node:fs')
+const { mkdir, rm } = require('node:fs/promises')
+
 const dir = resolve(__dirname, basename(__filename, '.js'))
-const rimraf = require('rimraf')
 
 const suite = async (suite, { registry, cache }) => {
   // setup two folders, one with a hidden lockfile, one without
-  await mkdirp(resolve(dir, 'with-hidden-lockfile'))
-  await mkdirp(resolve(dir, 'no-hidden-lockfile'))
+  await mkdir(resolve(dir, 'with-hidden-lockfile'), { recursive: true })
+  await mkdir(resolve(dir, 'no-hidden-lockfile'), { recursive: true })
 
   const dependencies = {
     'flow-parser': '0.114.0',
@@ -43,7 +43,7 @@ const suite = async (suite, { registry, cache }) => {
       dependencies,
     }))
     promises.push(await arb.reify().then(() =>
-      rimraf.sync(resolve(arb.path, 'node_modules', '.package-lock.json'))))
+      rm(resolve(arb.path, 'node_modules', '.package-lock.json'), { recursive: true, force: true })))
   }
   await Promise.all(promises)
 

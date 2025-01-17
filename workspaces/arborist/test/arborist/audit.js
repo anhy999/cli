@@ -1,65 +1,71 @@
 const t = require('tap')
+const { join, resolve } = require('node:path')
 const Arborist = require('../../lib/arborist/index.js')
-
-const { resolve } = require('path')
+const { normalizePath, printTree } = require('../fixtures/utils.js')
+const MockRegistry = require('@npmcli/mock-registry')
 
 const fixtures = resolve(__dirname, '../fixtures')
-
 const fixture = (t, p) => require(fixtures + '/reify-cases/' + p)(t)
 
-const {
-  start,
-  stop,
-  registry,
-  auditResponse,
-  advisoryBulkResponse,
-} = require('../fixtures/registry-mocks/server.js')
 const cache = t.testdir()
-
-t.before(start)
-t.teardown(stop)
-
-const {
-  normalizePath,
-  printTree,
-} = require('../fixtures/utils.js')
-
-const newArb = (path, options = {}) =>
-  new Arborist({ path, cache, registry, ...options })
+const newArb = (path, options = {}) => new Arborist({ path, cache, ...options })
 
 const cwd = normalizePath(process.cwd())
 t.cleanSnapshot = s => s.split(cwd).join('{CWD}')
-  .split(registry).join('https://registry.npmjs.org/')
+
+const createRegistry = (t) => {
+  const registry = new MockRegistry({
+    strict: true,
+    tap: t,
+    registry: 'https://registry.npmjs.org',
+  })
+  return registry
+}
 
 t.test('audit finds the bad deps', async t => {
   const path = resolve(fixtures, 'deprecated-dep')
-  t.teardown(auditResponse(resolve(fixtures, 'audit-nyc-mkdirp/audit.json')))
-
+  const registry = createRegistry(t, false)
+  registry.audit({ convert: true, results: require(resolve(fixtures, 'audit-nyc-mkdirp', 'audit.json')) })
+  registry.mocks({ dir: join(__dirname, '..', 'fixtures') })
   const arb = newArb(path)
-
   const report = await arb.audit()
   t.equal(report.topVulns.size, 0)
   t.equal(report.size, 2)
 })
 
+t.test('no package lock finds no bad deps', async t => {
+  const path = resolve(fixtures, 'deprecated-dep')
+  const registry = createRegistry(t, false)
+  registry.audit({ convert: true, results: require(resolve(fixtures, 'audit-nyc-mkdirp', 'audit.json')) })
+  registry.mocks({ dir: join(__dirname, '..', 'fixtures') })
+  const arb = newArb(path, { packageLock: false })
+  const report = await arb.audit()
+  t.equal(report.topVulns.size, 0)
+  t.equal(report.size, 0)
+})
+
 t.test('audit fix reifies out the bad deps', async t => {
   const path = fixture(t, 'deprecated-dep')
-  t.teardown(auditResponse(resolve(fixtures, 'audit-nyc-mkdirp/audit.json')))
+  const registry = createRegistry(t, false)
+  registry.audit({ convert: true, results: require(resolve(fixtures, 'audit-nyc-mkdirp', 'audit.json')) })
+  registry.mocks({ dir: join(__dirname, '..', 'fixtures') })
   const arb = newArb(path)
   const tree = printTree(await arb.audit({ fix: true }))
   t.matchSnapshot(tree, 'reified out the bad mkdirp and minimist')
 })
 
-t.test('audit does not do globals', t =>
-  t.rejects(newArb('.', { global: true }).audit(), {
+t.test('audit does not do globals', async t => {
+  await t.rejects(newArb('.', { global: true }).audit(), {
     message: '`npm audit` does not support testing globals',
     code: 'EAUDITGLOBAL',
-  }))
+  })
+})
 
 t.test('audit in a workspace', async t => {
   const src = resolve(fixtures, 'audit-nyc-mkdirp')
-  const auditFile = resolve(src, 'advisory-bulk.json')
-  t.teardown(advisoryBulkResponse(auditFile))
+  const registry = createRegistry(t)
+  registry.audit({ results: require(resolve(src, 'advisory-bulk.json')) })
+  registry.mocks({ dir: join(__dirname, '..', 'fixtures') })
 
   const path = t.testdir({
     'package.json': JSON.stringify({
@@ -110,8 +116,9 @@ t.test('audit in a workspace', async t => {
 
 t.test('audit with workspaces disabled', async t => {
   const src = resolve(fixtures, 'audit-nyc-mkdirp')
-  const auditFile = resolve(src, 'advisory-bulk.json')
-  t.teardown(advisoryBulkResponse(auditFile))
+  const registry = createRegistry(t)
+  registry.audit({ results: require(resolve(src, 'advisory-bulk.json')) })
+  registry.mocks({ dir: join(__dirname, '..', 'fixtures') })
 
   const path = t.testdir({
     'package.json': JSON.stringify({

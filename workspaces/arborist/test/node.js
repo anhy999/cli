@@ -1,10 +1,10 @@
-const util = require('util')
+const util = require('node:util')
 const t = require('tap')
 const Node = require('../lib/node.js')
 const OverrideSet = require('../lib/override-set.js')
 const Link = require('../lib/link.js')
 const Shrinkwrap = require('../lib/shrinkwrap.js')
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 const treeCheck = require('../lib/tree-check.js')
 
 const { normalizePath, normalizePaths } = require('./fixtures/utils.js')
@@ -533,7 +533,7 @@ t.test('load with a virtual filesystem parent', t => {
 
   t.equal(normalizePath(packages.path), normalizePath(root.realpath + '/link-target/packages'))
   t.equal(normalizePath(target3.path), normalizePath(root.realpath + '/link-target/packages/link3'))
-  t.equal(link3.target, target3, 'still targetting the right node 4')
+  t.equal(link3.target, target3, 'still targeting the right node 4')
   t.equal(target3.fsParent, packages, 'link3 target under packages')
   t.equal(normalizePath(link3.realpath), normalizePath(target3.path), 'link realpath updated')
 
@@ -1072,7 +1072,7 @@ t.test('bin paths', t => {
     realpath: root.path + '/d/e/f',
   })
 
-  const { resolve: r } = require('path')
+  const { resolve: r } = require('node:path')
 
   t.strictSame(root.binPaths, [])
   t.strictSame(link.binPaths, [
@@ -1131,7 +1131,7 @@ t.test('binPaths, but global', t => {
     realpath: root.path + '/d/e/f',
   })
 
-  const { resolve: r } = require('path')
+  const { resolve: r } = require('node:path')
 
   t.strictSame(root.binPaths, [])
   t.strictSame(link.binPaths, process.platform === 'win32'
@@ -2726,6 +2726,52 @@ t.test('overrides', (t) => {
     })
     t.ok(tree.overrides, 'overrides is defined')
     t.end()
+  })
+
+  t.test('node.overridden is true when an override applies to a specific node', async (t) => {
+    const tree = new Node({
+      loadOverrides: true,
+      path: '/some/path',
+      pkg: {
+        name: 'foo',
+        dependencies: {
+          bar: '^1',
+        },
+        overrides: {
+          baz: '1.0.0',
+        },
+      },
+      children: [{
+        name: 'bar',
+        version: '1.0.0',
+        pkg: {
+          dependencies: {
+            baz: '2.0.0',
+          },
+        },
+        children: [{
+          name: 'baz',
+          version: '1.0.0',
+          pkg: {
+            dependencies: {
+              buzz: '1.0.0',
+            },
+          },
+          children: [{
+            name: 'buzz',
+            version: '1.0.0',
+            pkg: {},
+          }],
+        }],
+      }],
+    })
+
+    const bar = tree.edgesOut.get('bar').to
+    t.not(bar.overridden, 'bar was not overridden')
+    const baz = bar.edgesOut.get('baz').to
+    t.ok(baz.overridden, 'baz was overridden')
+    const buzz = baz.edgesOut.get('buzz').to
+    t.not(buzz.overridden, 'buzz was not overridden')
   })
 
   t.test('assertRootOverrides throws when a dependency and override conflict', async (t) => {

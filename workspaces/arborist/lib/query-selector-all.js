@@ -1,11 +1,14 @@
 'use strict'
 
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 const { parser, arrayDelimiter } = require('@npmcli/query')
 const localeCompare = require('@isaacs/string-locale-compare')('en')
+const { log } = require('proc-log')
+const { minimatch } = require('minimatch')
 const npa = require('npm-package-arg')
-const minimatch = require('minimatch')
+const pacote = require('pacote')
 const semver = require('semver')
+const npmFetch = require('npm-registry-fetch')
 
 // handle results for parsed query asts, results are stored in a map that has a
 // key that points to each ast selector node and stores the resulting array of
@@ -15,6 +18,8 @@ class Results {
   #currentAstSelector
   #initialItems
   #inventory
+  #outdatedCache = new Map()
+  #vulnCache
   #pendingCombinator
   #results = new Map()
   #targetNode
@@ -23,9 +28,13 @@ class Results {
     this.#currentAstSelector = opts.rootAstNode.nodes[0]
     this.#inventory = opts.inventory
     this.#initialItems = opts.initialItems
+    this.#vulnCache = opts.vulnCache
     this.#targetNode = opts.targetNode
 
     this.currentResults = this.#initialItems
+
+    // We get this when first called and need to pass it to pacote
+    this.flatOptions = opts.flatOptions || {}
 
     // reset by rootAstNode walker
     this.currentAstNode = opts.rootAstNode
@@ -57,6 +66,7 @@ class Results {
     if (firstParsed) {
       return this.#initialItems
     }
+
     if (this.currentAstNode.prev().type === 'combinator') {
       return this.#inventory
     }
@@ -113,18 +123,18 @@ class Results {
     this.#pendingCombinator = combinators[String(this.currentAstNode)]
   }
 
-  // name selectors (i.e. #foo, #foo@1.0.0)
+  // name selectors (i.e. #foo)
   // css calls this id, we interpret it as name
   idType () {
-    const spec = npa(this.currentAstNode.value)
+    const name = this.currentAstNode.value
     const nextResults = this.initialItems.filter(node =>
-      (node.name === spec.name || node.package.name === spec.name) &&
-      (semver.satisfies(node.version, spec.fetchSpec) || !spec.rawSpec))
+      (name === node.name) || (name === node.package.name)
+    )
     this.processPendingCombinator(nextResults)
   }
 
   // pseudo selectors (prefixed with :)
-  pseudoType () {
+  async pseudoType () {
     const pseudoFn = `${this.currentAstNode.value.slice(1)}Pseudo`
     if (!this[pseudoFn]) {
       throw Object.assign(
@@ -133,7 +143,7 @@ class Results {
         { code: 'EQUERYNOPSEUDO' }
       )
     }
-    const nextResults = this[pseudoFn]()
+    const nextResults = await this[pseudoFn]()
     this.processPendingCombinator(nextResults)
   }
 
@@ -194,15 +204,17 @@ class Results {
     return this.initialItems.filter(node => node.extraneous)
   }
 
-  hasPseudo () {
+  async hasPseudo () {
     const found = []
     for (const item of this.initialItems) {
-      const res = retrieveNodesFromParsedAst({
-        // This is the one time initialItems differs from inventory
+      // This is the one time initialItems differs from inventory
+      const res = await retrieveNodesFromParsedAst({
+        flatOptions: this.flatOptions,
         initialItems: [item],
         inventory: this.#inventory,
         rootAstNode: this.currentAstNode.nestedNode,
         targetNode: item,
+        vulnCache: this.#vulnCache,
       })
       if (res.size > 0) {
         found.push(item)
@@ -224,12 +236,14 @@ class Results {
     return found
   }
 
-  isPseudo () {
-    const res = retrieveNodesFromParsedAst({
+  async isPseudo () {
+    const res = await retrieveNodesFromParsedAst({
+      flatOptions: this.flatOptions,
       initialItems: this.initialItems,
       inventory: this.#inventory,
       rootAstNode: this.currentAstNode.nestedNode,
       targetNode: this.currentAstNode,
+      vulnCache: this.#vulnCache,
     })
     return [...res]
   }
@@ -243,23 +257,34 @@ class Results {
       for (const edge of node.edgesOut.values()) {
         if (edge.missing) {
           const pkg = { name: edge.name, version: edge.spec }
-          res.push(new this.#targetNode.constructor({ pkg }))
+          const item = new this.#targetNode.constructor({ pkg })
+          item.queryContext = {
+            missing: true,
+          }
+          item.edgesIn = new Set([edge])
+          res.push(item)
         }
       }
       return res
     }, [])
   }
 
-  notPseudo () {
-    const res = retrieveNodesFromParsedAst({
+  async notPseudo () {
+    const res = await retrieveNodesFromParsedAst({
+      flatOptions: this.flatOptions,
       initialItems: this.initialItems,
       inventory: this.#inventory,
       rootAstNode: this.currentAstNode.nestedNode,
       targetNode: this.currentAstNode,
+      vulnCache: this.#vulnCache,
     })
     const internalSelector = new Set(res)
     return this.initialItems.filter(node =>
       !internalSelector.has(node))
+  }
+
+  overriddenPseudo () {
+    return this.initialItems.filter(node => node.overridden)
   }
 
   pathPseudo () {
@@ -287,11 +312,115 @@ class Results {
   }
 
   semverPseudo () {
-    if (!this.currentAstNode.semverValue) {
+    const {
+      attributeMatcher,
+      lookupProperties,
+      semverFunc = 'infer',
+      semverValue,
+    } = this.currentAstNode
+    const { qualifiedAttribute } = attributeMatcher
+
+    if (!semverValue) {
+      // DEPRECATED: remove this warning and throw an error as part of @npmcli/arborist@6
+      log.warn('query', 'usage of :semver() with no parameters is deprecated')
       return this.initialItems
     }
-    return this.initialItems.filter(node =>
-      semver.satisfies(node.version, this.currentAstNode.semverValue))
+
+    if (!semver.valid(semverValue) && !semver.validRange(semverValue)) {
+      throw Object.assign(
+        new Error(`\`${semverValue}\` is not a valid semver version or range`),
+        { code: 'EQUERYINVALIDSEMVER' })
+    }
+
+    const valueIsVersion = !!semver.valid(semverValue)
+
+    const nodeMatches = (node, obj) => {
+      // if we already have an operator, the user provided some test as part of the selector
+      // we evaluate that first because if it fails we don't want this node anyway
+      if (attributeMatcher.operator) {
+        if (!attributeMatch(attributeMatcher, obj)) {
+          // if the initial operator doesn't match, we're done
+          return false
+        }
+      }
+
+      const attrValue = obj[qualifiedAttribute]
+      // both valid and validRange return null for undefined, so this will skip both nodes that
+      // do not have the attribute defined as well as those where the attribute value is invalid
+      // and those where the value from the package.json is not a string
+      if ((!semver.valid(attrValue) && !semver.validRange(attrValue)) ||
+          typeof attrValue !== 'string') {
+        return false
+      }
+
+      const attrIsVersion = !!semver.valid(attrValue)
+
+      let actualFunc = semverFunc
+
+      // if we're asked to infer, we examine outputs to make a best guess
+      if (actualFunc === 'infer') {
+        if (valueIsVersion && attrIsVersion) {
+          // two versions -> semver.eq
+          actualFunc = 'eq'
+        } else if (!valueIsVersion && !attrIsVersion) {
+          // two ranges -> semver.intersects
+          actualFunc = 'intersects'
+        } else {
+          // anything else -> semver.satisfies
+          actualFunc = 'satisfies'
+        }
+      }
+
+      if (['eq', 'neq', 'gt', 'gte', 'lt', 'lte'].includes(actualFunc)) {
+        // both sides must be versions, but one is not
+        if (!valueIsVersion || !attrIsVersion) {
+          return false
+        }
+
+        return semver[actualFunc](attrValue, semverValue)
+      } else if (['gtr', 'ltr', 'satisfies'].includes(actualFunc)) {
+        // at least one side must be a version, but neither is
+        if (!valueIsVersion && !attrIsVersion) {
+          return false
+        }
+
+        return valueIsVersion
+          ? semver[actualFunc](semverValue, attrValue)
+          : semver[actualFunc](attrValue, semverValue)
+      } else if (['intersects', 'subset'].includes(actualFunc)) {
+        // these accept two ranges and since a version is also a range, anything goes
+        return semver[actualFunc](attrValue, semverValue)
+      } else {
+        // user provided a function we don't know about, throw an error
+        throw Object.assign(new Error(`\`semver.${actualFunc}\` is not a supported operator.`),
+          { code: 'EQUERYINVALIDOPERATOR' })
+      }
+    }
+
+    return this.initialItems.filter((node) => {
+      // no lookupProperties just means its a top level property, see if it matches
+      if (!lookupProperties.length) {
+        return nodeMatches(node, node.package)
+      }
+
+      // this code is mostly duplicated from attrPseudo to traverse into the package until we get
+      // to our deepest requested object
+      let objs = [node.package]
+      for (const prop of lookupProperties) {
+        if (prop === arrayDelimiter) {
+          objs = objs.flat()
+          continue
+        }
+
+        objs = objs.flatMap(obj => obj[prop] || [])
+        const noAttr = objs.every(obj => !obj)
+        if (noAttr) {
+          return false
+        }
+
+        return objs.some(obj => nodeMatches(node, obj))
+      }
+    })
   }
 
   typePseudo () {
@@ -313,32 +442,235 @@ class Results {
   dedupedPseudo () {
     return this.initialItems.filter(node => node.target.edgesIn.size > 1)
   }
+
+  async vulnPseudo () {
+    if (!this.initialItems.length) {
+      return this.initialItems
+    }
+    if (!this.#vulnCache) {
+      const packages = {}
+      // We have to map the items twice, once to get the request, and a second time to filter out the results of that request
+      this.initialItems.map((node) => {
+        if (node.isProjectRoot || node.package.private) {
+          return
+        }
+        if (!packages[node.name]) {
+          packages[node.name] = []
+        }
+        if (!packages[node.name].includes(node.version)) {
+          packages[node.name].push(node.version)
+        }
+      })
+      const res = await npmFetch('/-/npm/v1/security/advisories/bulk', {
+        ...this.flatOptions,
+        registry: this.flatOptions.auditRegistry || this.flatOptions.registry,
+        method: 'POST',
+        gzip: true,
+        body: packages,
+      })
+      this.#vulnCache = await res.json()
+    }
+    const advisories = this.#vulnCache
+    const { vulns } = this.currentAstNode
+    return this.initialItems.filter(item => {
+      const vulnerable = advisories[item.name]?.filter(advisory => {
+        // This could be for another version of this package elsewhere in the tree
+        if (!semver.intersects(advisory.vulnerable_versions, item.version)) {
+          return false
+        }
+        if (!vulns) {
+          return true
+        }
+        // vulns are OR with each other, if any one matches we're done
+        for (const vuln of vulns) {
+          if (vuln.severity && !vuln.severity.includes('*')) {
+            if (!vuln.severity.includes(advisory.severity)) {
+              continue
+            }
+          }
+
+          if (vuln?.cwe) {
+            // * is special, it means "has a cwe"
+            if (vuln.cwe.includes('*')) {
+              if (!advisory.cwe.length) {
+                continue
+              }
+            } else if (!vuln.cwe.every(cwe => advisory.cwe.includes(`CWE-${cwe}`))) {
+              continue
+            }
+          }
+          return true
+        }
+      })
+      if (vulnerable?.length) {
+        item.queryContext = {
+          advisories: vulnerable,
+        }
+        return true
+      }
+      return false
+    })
+  }
+
+  async outdatedPseudo () {
+    const { outdatedKind = 'any' } = this.currentAstNode
+
+    // filter the initialItems
+    // NOTE: this uses a Promise.all around a map without in-line concurrency handling
+    // since the only async action taken is retrieving the packument, which is limited
+    // based on the max-sockets config in make-fetch-happen
+    const initialResults = await Promise.all(this.initialItems.map(async (node) => {
+      // the root can't be outdated, skip it
+      if (node.isProjectRoot) {
+        return false
+      }
+
+      // private packages can't be published, skip them
+      if (node.package.private) {
+        return false
+      }
+
+      // we cache the promise representing the full versions list, this helps reduce the
+      // number of requests we send by keeping population of the cache in a single tick
+      // making it less likely that multiple requests for the same package will be inflight
+      if (!this.#outdatedCache.has(node.name)) {
+        this.#outdatedCache.set(node.name, getPackageVersions(node.name, this.flatOptions))
+      }
+      const availableVersions = await this.#outdatedCache.get(node.name)
+
+      // we attach _all_ versions to the queryContext to allow consumers to do their own
+      // filtering and comparisons
+      node.queryContext.versions = availableVersions
+
+      // next we further reduce the set to versions that are greater than the current one
+      const greaterVersions = availableVersions.filter((available) => {
+        return semver.gt(available, node.version)
+      })
+
+      // no newer versions than the current one, drop this node from the result set
+      if (!greaterVersions.length) {
+        return false
+      }
+
+      // if we got here, we know that newer versions exist, if the kind is 'any' we're done
+      if (outdatedKind === 'any') {
+        return node
+      }
+
+      // look for newer versions that differ from current by a specific part of the semver version
+      if (['major', 'minor', 'patch'].includes(outdatedKind)) {
+        // filter the versions greater than our current one based on semver.diff
+        const filteredVersions = greaterVersions.filter((version) => {
+          return semver.diff(node.version, version) === outdatedKind
+        })
+
+        // no available versions are of the correct diff type
+        if (!filteredVersions.length) {
+          return false
+        }
+
+        return node
+      }
+
+      // look for newer versions that satisfy at least one edgeIn to this node
+      if (outdatedKind === 'in-range') {
+        const inRangeContext = []
+        for (const edge of node.edgesIn) {
+          const inRangeVersions = greaterVersions.filter((version) => {
+            return semver.satisfies(version, edge.spec)
+          })
+
+          // this edge has no in-range candidates, just move on
+          if (!inRangeVersions.length) {
+            continue
+          }
+
+          inRangeContext.push({
+            from: edge.from.location,
+            versions: inRangeVersions,
+          })
+        }
+
+        // if we didn't find at least one match, drop this node
+        if (!inRangeContext.length) {
+          return false
+        }
+
+        // now add to the context each version that is in-range for each edgeIn
+        node.queryContext.outdated = {
+          ...node.queryContext.outdated,
+          inRange: inRangeContext,
+        }
+
+        return node
+      }
+
+      // look for newer versions that _do not_ satisfy at least one edgeIn
+      if (outdatedKind === 'out-of-range') {
+        const outOfRangeContext = []
+        for (const edge of node.edgesIn) {
+          const outOfRangeVersions = greaterVersions.filter((version) => {
+            return !semver.satisfies(version, edge.spec)
+          })
+
+          // this edge has no out-of-range candidates, skip it
+          if (!outOfRangeVersions.length) {
+            continue
+          }
+
+          outOfRangeContext.push({
+            from: edge.from.location,
+            versions: outOfRangeVersions,
+          })
+        }
+
+        // if we didn't add at least one thing to the context, this node is not a match
+        if (!outOfRangeContext.length) {
+          return false
+        }
+
+        // attach the out-of-range context to the node
+        node.queryContext.outdated = {
+          ...node.queryContext.outdated,
+          outOfRange: outOfRangeContext,
+        }
+
+        return node
+      }
+
+      // any other outdatedKind is unknown and will never match
+      return false
+    }))
+
+    // return an array with the holes for non-matching nodes removed
+    return initialResults.filter(Boolean)
+  }
 }
 
 // operators for attribute selectors
 const attributeOperators = {
   // attribute value is equivalent
-  '=' ({ attr, value, insensitive }) {
+  '=' ({ attr, value }) {
     return attr === value
   },
   // attribute value contains word
-  '~=' ({ attr, value, insensitive }) {
+  '~=' ({ attr, value }) {
     return (attr.match(/\w+/g) || []).includes(value)
   },
   // attribute value contains string
-  '*=' ({ attr, value, insensitive }) {
+  '*=' ({ attr, value }) {
     return attr.includes(value)
   },
   // attribute value is equal or starts with
-  '|=' ({ attr, value, insensitive }) {
+  '|=' ({ attr, value }) {
     return attr.startsWith(`${value}-`)
   },
   // attribute value starts with
-  '^=' ({ attr, value, insensitive }) {
+  '^=' ({ attr, value }) {
     return attr.startsWith(value)
   },
   // attribute value ends with
-  '$=' ({ attr, value, insensitive }) {
+  '$=' ({ attr, value }) {
     return attr.endsWith(value)
   },
 }
@@ -354,6 +686,7 @@ const attributeOperator = ({ attr, value, insensitive, operator }) => {
   if (insensitive) {
     attr = attr.toLowerCase()
   }
+
   return attributeOperators[operator]({
     attr,
     insensitive,
@@ -447,7 +780,11 @@ const depTypes = {
 // the compare nodes array
 const hasParent = (node, compareNodes) => {
   // All it takes is one so we loop and return on the first hit
-  for (const compareNode of compareNodes) {
+  for (let compareNode of compareNodes) {
+    if (compareNode.isLink) {
+      compareNode = compareNode.target
+    }
+
     // follows logical parent for link anscestors
     if (node.isTop && (node.resolveParent === compareNode)) {
       return true
@@ -471,7 +808,10 @@ const hasAscendant = (node, compareNodes, seen = new Set()) => {
   }
 
   if (node.isTop && node.resolveParent) {
-    return hasAscendant(node.resolveParent, compareNodes)
+    /* istanbul ignore if - investigate if linksIn check obviates need for this */
+    if (hasAscendant(node.resolveParent, compareNodes)) {
+      return true
+    }
   }
   for (const edge of node.edgesIn) {
     // TODO Need a test with an infinite loop
@@ -480,6 +820,11 @@ const hasAscendant = (node, compareNodes, seen = new Set()) => {
     }
     seen.add(edge)
     if (edge && edge.from && hasAscendant(edge.from, compareNodes, seen)) {
+      return true
+    }
+  }
+  for (const linkNode of node.linksIn) {
+    if (hasAscendant(linkNode, compareNodes, seen)) {
       return true
     }
   }
@@ -512,7 +857,41 @@ const combinators = {
   },
 }
 
-const retrieveNodesFromParsedAst = (opts) => {
+// get a list of available versions of a package filtered to respect --before
+// NOTE: this runs over each node and should not throw
+const getPackageVersions = async (name, opts) => {
+  let packument
+  try {
+    packument = await pacote.packument(name, {
+      ...opts,
+      fullMetadata: false, // we only need the corgi
+    })
+  } catch (err) {
+    // if the fetch fails, log a warning and pretend there are no versions
+    log.warn('query', `could not retrieve packument for ${name}: ${err.message}`)
+    return []
+  }
+
+  // start with a sorted list of all versions (lowest first)
+  let candidates = Object.keys(packument.versions).sort(semver.compare)
+
+  // if the packument has a time property, and the user passed a before flag, then
+  // we filter this list down to only those versions that existed before the specified date
+  if (packument.time && opts.before) {
+    candidates = candidates.filter((version) => {
+      // this version isn't found in the times at all, drop it
+      if (!packument.time[version]) {
+        return false
+      }
+
+      return Date.parse(packument.time[version]) <= opts.before
+    })
+  }
+
+  return candidates
+}
+
+const retrieveNodesFromParsedAst = async (opts) => {
   // when we first call this it's the parsed query.  all other times it's
   // results.currentNode.nestedNode
   const rootAstNode = opts.rootAstNode
@@ -523,7 +902,13 @@ const retrieveNodesFromParsedAst = (opts) => {
 
   const results = new Results(opts)
 
+  const astNodeQueue = new Set()
+  // walk is sync, so we have to build up our async functions and then await them later
   rootAstNode.walk((nextAstNode) => {
+    astNodeQueue.add(nextAstNode)
+  })
+
+  for (const nextAstNode of astNodeQueue) {
     // This is the only place we reset currentAstNode
     results.currentAstNode = nextAstNode
     const updateFn = `${results.currentAstNode.type}Type`
@@ -533,23 +918,22 @@ const retrieveNodesFromParsedAst = (opts) => {
         { code: 'EQUERYNOSELECTOR' }
       )
     }
-    results[updateFn]()
-  })
+    await results[updateFn]()
+  }
 
   return results.collect(rootAstNode)
 }
 
-// We are keeping this async in the event that we do add async operators, we
-// won't have to have a breaking change on this function signature.
-const querySelectorAll = async (targetNode, query) => {
+const querySelectorAll = async (targetNode, query, flatOptions) => {
   // This never changes ever we just pass it around. But we can't scope it to
   // this whole file if we ever want to support concurrent calls to this
   // function.
   const inventory = [...targetNode.root.inventory.values()]
   // res is a Set of items returned for each parsed css ast selector
-  const res = retrieveNodesFromParsedAst({
+  const res = await retrieveNodesFromParsedAst({
     initialItems: inventory,
     inventory,
+    flatOptions,
     rootAstNode: parser(query),
     targetNode,
   })

@@ -1,149 +1,117 @@
 const t = require('tap')
 
-const baseOpts = {
-  args: [],
-  call: '',
-  color: false,
-  path: '',
-  runPath: '',
-  shell: process.platform === 'win32'
-    ? process.env.ComSpec || 'cmd'
-    : process.env.SHELL || 'sh',
+const mockRunScript = async (t, mocks, { level = 0 } = {}) => {
+  const mockedRunScript = t.mock('../lib/run-script.js', mocks)
+  const { Chalk } = await import('chalk')
+
+  const outputs = []
+  const handleOutput = (_level, msg) => {
+    if (_level === 'standard') {
+      outputs.push(msg)
+    }
+  }
+  process.on('output', handleOutput)
+  t.teardown(() => process.off('output', handleOutput))
+
+  const logs = []
+  const handleLog = (_level, title, msg) => {
+    logs.push(`${_level} ${title} ${msg}`)
+  }
+  process.on('log', handleLog)
+  t.teardown(() => process.off('log', handleLog))
+
+  const runScript = (opts) => mockedRunScript({
+    args: [],
+    call: '',
+    path: '',
+    runPath: '',
+    shell: process.platform === 'win32'
+      ? process.env.ComSpec || 'cmd'
+      : process.env.SHELL || 'sh',
+    ...opts,
+    flatOptions: { chalk: new Chalk({ level }) },
+  })
+  return { runScript, outputs, logs }
 }
 
-t.test('disable, enable log progress', t => {
-  t.plan(3)
+t.test('no package.json', async t => {
+  t.plan(1)
 
   const path = t.testdir({
     'package.json': JSON.stringify({
       name: 'pkg',
     }),
   })
-  const runScript = t.mock('../lib/run-script.js', {
-    '@npmcli/ci-detect': () => false,
-    '@npmcli/run-script': async () => {
-      t.ok('should call run-script')
-    },
-    '../lib/no-tty.js': () => false,
-    npmlog: {
-      disableProgress () {
-        t.ok('should disable progress')
-      },
-      enableProgress () {
-        t.ok('should enable progress')
-      },
-    },
-  })
-
-  runScript({
-    ...baseOpts,
-    path,
-  })
-})
-
-t.test('no package.json', t => {
-  t.plan(1)
-
-  const runScript = t.mock('../lib/run-script.js', {
-    '@npmcli/ci-detect': () => false,
+  const { runScript } = await mockRunScript(t, {
+    'ci-info': { isCI: false },
     '@npmcli/run-script': async () => {
       t.ok('should call run-script')
     },
     '../lib/no-tty.js': () => false,
   })
 
-  runScript(baseOpts)
+  await runScript({ path })
 })
 
-t.test('colorized interactive mode msg', t => {
+t.test('colorized interactive mode msg', async t => {
   t.plan(2)
 
-  const runScript = t.mock('../lib/run-script.js', {
-    '@npmcli/ci-detect': () => false,
+  const { runScript, outputs } = await mockRunScript(t, {
+    'ci-info': { isCI: false },
     '@npmcli/run-script': async () => {
       t.ok('should call run-script')
     },
     '../lib/no-tty.js': () => false,
-  })
+  }, { level: 3 })
 
-  const OUTPUT = []
-  runScript({
-    ...baseOpts,
-    output: msg => {
-      OUTPUT.push(msg)
-    },
+  await runScript({
     runPath: '/foo/',
-    color: true,
   })
-    .then(() => {
-      t.matchSnapshot(OUTPUT.join('\n'), 'should print colorized output')
-    })
-    .catch(err => {
-      throw err
-    })
+  t.matchSnapshot(outputs.join('\n'), 'should print colorized output')
 })
 
-t.test('no color interactive mode msg', t => {
+t.test('no color interactive mode msg', async t => {
   t.plan(2)
 
-  const runScript = t.mock('../lib/run-script.js', {
-    '@npmcli/ci-detect': () => false,
+  const { runScript, outputs } = await mockRunScript(t, {
+    'ci-info': { isCI: false },
     '@npmcli/run-script': async () => {
       t.ok('should call run-script')
     },
     '../lib/no-tty.js': () => false,
   })
 
-  const OUTPUT = []
-  runScript({
-    ...baseOpts,
-    output: msg => {
-      OUTPUT.push(msg)
-    },
+  await runScript({
     runPath: '/foo/',
   })
-    .then(() => {
-      t.matchSnapshot(OUTPUT.join('\n'), 'should print non-colorized output')
-    })
-    .catch(err => {
-      throw err
-    })
+  t.matchSnapshot(outputs.join('\n'), 'should print non-colorized output')
 })
 
-t.test('no tty', t => {
+t.test('no tty', async t => {
   t.plan(1)
 
-  const runScript = t.mock('../lib/run-script.js', {
-    '@npmcli/ci-detect': () => false,
+  const { runScript } = await mockRunScript(t, {
+    'ci-info': { isCI: false },
     '@npmcli/run-script': async () => {
       t.ok('should call run-script')
     },
     '../lib/no-tty.js': () => true,
   })
 
-  runScript(baseOpts)
+  await runScript()
 })
 
-t.test('ci env', t => {
-  t.plan(2)
-
-  const runScript = t.mock('../lib/run-script.js', {
-    '@npmcli/ci-detect': () => true,
+t.test('ci env', async t => {
+  const { runScript, logs } = await mockRunScript(t, {
+    'ci-info': { isCI: true },
     '@npmcli/run-script': async () => {
       throw new Error('should not call run-script')
     },
     '../lib/no-tty.js': () => false,
-    'proc-log': {
-      warn (title, msg) {
-        t.equal(title, 'exec', 'should have expected title')
-        t.equal(
-          msg,
-          'Interactive mode disabled in CI environment',
-          'should have expected ci environment message'
-        )
-      },
-    },
+
   })
 
-  runScript({ ...baseOpts })
+  await runScript()
+
+  t.equal(logs[0], 'warn exec Interactive mode disabled in CI environment')
 })

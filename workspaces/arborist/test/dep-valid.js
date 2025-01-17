@@ -2,7 +2,7 @@ const t = require('tap')
 const depValid = require('../lib/dep-valid.js')
 const npa = require('npm-package-arg')
 const { normalizePaths } = require('./fixtures/utils.js')
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 
 // dep-valid reads from requestor.edgesOut so we use this instead of {} in these tests
 const emptyRequestor = {
@@ -184,8 +184,21 @@ t.test('invalid request all together', t => {
 
 t.test('installLinks makes Link nodes invalid', t => {
   const requestor = { errors: [], installLinks: true, edgesOut: new Map() }
-  const child = { isLink: true, name: 'kid' }
+  const child = { isLink: true, isWorkspace: false, name: 'kid' }
   const request = { type: 'directory' }
   t.notOk(depValid(child, request, null, requestor))
+  t.end()
+})
+
+t.test('installLinks does not make workspace nodes invalid', t => {
+  const requestor = { errors: [], installLinks: true, edgesOut: new Map() }
+  const child = {
+    isLink: true,
+    isWorkspace: true,
+    name: 'kid',
+    realpath: '/some/path',
+  }
+  const request = normalizePaths(npa('file:/some/path'))
+  t.ok(depValid(child, request, null, requestor))
   t.end()
 })

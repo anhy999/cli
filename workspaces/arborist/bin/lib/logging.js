@@ -1,9 +1,8 @@
-const log = require('proc-log')
-const mkdirp = require('mkdirp')
-const fs = require('fs')
-const { dirname } = require('path')
-const os = require('os')
-const { inspect, format } = require('util')
+const { log } = require('proc-log')
+const fs = require('node:fs')
+const { dirname } = require('node:path')
+const os = require('node:os')
+const { inspect, format } = require('node:util')
 
 const { bin: options } = require('./options.js')
 
@@ -70,7 +69,7 @@ if (options.loglevel !== 'silent') {
 
 if (options.logfile) {
   log.silly('logfile', options.logfile)
-  mkdirp.sync(dirname(options.logfile))
+  fs.mkdirSync(dirname(options.logfile), { recursive: true })
   const fd = fs.openSync(options.logfile, 'a')
   addLogListener((str) => fs.writeSync(fd, str))
 }

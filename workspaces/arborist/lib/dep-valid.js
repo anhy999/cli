@@ -6,7 +6,7 @@
 
 const semver = require('semver')
 const npa = require('npm-package-arg')
-const { relative } = require('path')
+const { relative } = require('node:path')
 const fromPath = require('./from-path.js')
 
 const depValid = (child, requested, requestor) => {
@@ -84,15 +84,21 @@ const depValid = (child, requested, requestor) => {
       const reqHost = requested.hosted
       const reqCommit = /^[a-fA-F0-9]{40}$/.test(requested.gitCommittish || '')
       const nc = { noCommittish: !reqCommit }
-      const sameRepo =
-        resHost ? reqHost && reqHost.ssh(nc) === resHost.ssh(nc)
-        : resRepo.fetchSpec === requested.fetchSpec
-
-      return !sameRepo ? false
-        : !requested.gitRange ? true
-        : semver.satisfies(child.package.version, requested.gitRange, {
-          loose: true,
-        })
+      if (!resHost) {
+        if (resRepo.fetchSpec !== requested.fetchSpec) {
+          return false
+        }
+      } else {
+        if (reqHost?.ssh(nc) !== resHost.ssh(nc)) {
+          return false
+        }
+      }
+      if (!requested.gitRange) {
+        return true
+      }
+      return semver.satisfies(child.package.version, requested.gitRange, {
+        loose: true,
+      })
     }
 
     default: // unpossible, just being cautious
@@ -109,8 +115,8 @@ const depValid = (child, requested, requestor) => {
 const linkValid = (child, requested, requestor) => {
   const isLink = !!child.isLink
   // if we're installing links and the node is a link, then it's invalid because we want
-  // a real node to be there
-  if (requestor.installLinks) {
+  // a real node to be there.  Except for workspaces. They are always links.
+  if (requestor.installLinks && !child.isWorkspace) {
     return !isLink
   }
 
@@ -118,7 +124,7 @@ const linkValid = (child, requested, requestor) => {
   return isLink && relative(child.realpath, requested.fetchSpec) === ''
 }
 
-const tarballValid = (child, requested, requestor) => {
+const tarballValid = (child, requested) => {
   if (child.isLink) {
     return false
   }

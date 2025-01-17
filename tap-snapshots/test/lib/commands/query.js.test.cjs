@@ -13,8 +13,8 @@ exports[`test/lib/commands/query.js TAP global > should return global package 1`
     "_id": "lorem@2.0.0",
     "pkgid": "lorem@2.0.0",
     "location": "node_modules/lorem",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-global/global/node_modules/lorem",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-global/global/node_modules/lorem",
+    "path": "{CWD}/global/node_modules/lorem",
+    "realpath": "{CWD}/global/node_modules/lorem",
     "resolved": null,
     "from": [
       ""
@@ -22,7 +22,9 @@ exports[`test/lib/commands/query.js TAP global > should return global package 1`
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   }
 ]
 `
@@ -40,8 +42,8 @@ exports[`test/lib/commands/query.js TAP include-workspace-root > should return w
     },
     "pkgid": "project@",
     "location": "",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-include-workspace-root/prefix",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-include-workspace-root/prefix",
+    "path": "{CWD}/prefix",
+    "realpath": "{CWD}/prefix",
     "resolved": null,
     "from": [],
     "to": [
@@ -51,7 +53,9 @@ exports[`test/lib/commands/query.js TAP include-workspace-root > should return w
     ],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   },
   {
     "name": "c",
@@ -59,14 +63,16 @@ exports[`test/lib/commands/query.js TAP include-workspace-root > should return w
     "_id": "c@1.0.0",
     "pkgid": "c@1.0.0",
     "location": "c",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-include-workspace-root/prefix/c",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-include-workspace-root/prefix/c",
+    "path": "{CWD}/prefix/c",
+    "realpath": "{CWD}/prefix/c",
     "resolved": null,
     "from": [],
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   }
 ]
 `
@@ -79,14 +85,89 @@ exports[`test/lib/commands/query.js TAP linked node > should return linked node 
     "_id": "a@1.0.0",
     "pkgid": "a@1.0.0",
     "location": "a",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-linked-node/prefix/a",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-linked-node/prefix/a",
+    "path": "{CWD}/prefix/a",
+    "realpath": "{CWD}/prefix/a",
     "resolved": null,
     "from": [],
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
+  }
+]
+`
+
+exports[`test/lib/commands/query.js TAP missing > should return missing node 1`] = `
+[
+  {
+    "name": "b",
+    "version": "^1.0.0",
+    "_id": "b@^1.0.0",
+    "pkgid": "b@^1.0.0",
+    "path": null,
+    "realpath": null,
+    "resolved": null,
+    "from": [
+      ""
+    ],
+    "to": [],
+    "dev": true,
+    "inBundle": false,
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {
+      "missing": true
+    }
+  }
+]
+`
+
+exports[`test/lib/commands/query.js TAP package-lock-only with package lock > should return valid response with only lock info 1`] = `
+[
+  {
+    "name": "project",
+    "dependencies": {
+      "a": "^1.0.0"
+    },
+    "pkgid": "project@",
+    "location": "",
+    "path": "{CWD}/prefix",
+    "realpath": "{CWD}/prefix",
+    "resolved": null,
+    "from": [],
+    "to": [
+      "node_modules/a"
+    ],
+    "dev": false,
+    "inBundle": false,
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
+  },
+  {
+    "version": "1.2.3",
+    "resolved": "https://dummy.npmjs.org/a/-/a-1.2.3.tgz",
+    "integrity": "sha512-dummy",
+    "engines": {
+      "node": ">=14.17"
+    },
+    "name": "a",
+    "_id": "a@1.2.3",
+    "pkgid": "a@1.2.3",
+    "location": "node_modules/a",
+    "path": "{CWD}/prefix/node_modules/a",
+    "realpath": "{CWD}/prefix/node_modules/a",
+    "from": [
+      ""
+    ],
+    "to": [],
+    "dev": false,
+    "inBundle": false,
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   }
 ]
 `
@@ -101,8 +182,8 @@ exports[`test/lib/commands/query.js TAP recursive tree > should return everythin
     },
     "pkgid": "project@",
     "location": "",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-recursive-tree/prefix",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-recursive-tree/prefix",
+    "path": "{CWD}/prefix",
+    "realpath": "{CWD}/prefix",
     "resolved": null,
     "from": [],
     "to": [
@@ -111,13 +192,15 @@ exports[`test/lib/commands/query.js TAP recursive tree > should return everythin
     ],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   },
   {
     "pkgid": "a@",
     "location": "node_modules/a",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-recursive-tree/prefix/node_modules/a",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-recursive-tree/prefix/node_modules/a",
+    "path": "{CWD}/prefix/node_modules/a",
+    "realpath": "{CWD}/prefix/node_modules/a",
     "resolved": null,
     "from": [
       ""
@@ -125,13 +208,15 @@ exports[`test/lib/commands/query.js TAP recursive tree > should return everythin
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   },
   {
     "pkgid": "b@",
     "location": "node_modules/b",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-recursive-tree/prefix/node_modules/b",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-recursive-tree/prefix/node_modules/b",
+    "path": "{CWD}/prefix/node_modules/b",
+    "realpath": "{CWD}/prefix/node_modules/b",
     "resolved": null,
     "from": [
       ""
@@ -139,7 +224,9 @@ exports[`test/lib/commands/query.js TAP recursive tree > should return everythin
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   }
 ]
 `
@@ -157,8 +244,8 @@ exports[`test/lib/commands/query.js TAP simple query > should return root object
     },
     "pkgid": "project@",
     "location": "",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-simple-query/prefix",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-simple-query/prefix",
+    "path": "{CWD}/prefix",
+    "realpath": "{CWD}/prefix",
     "resolved": null,
     "from": [],
     "to": [
@@ -167,13 +254,15 @@ exports[`test/lib/commands/query.js TAP simple query > should return root object
     ],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   },
   {
     "pkgid": "a@",
     "location": "node_modules/a",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-simple-query/prefix/node_modules/a",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-simple-query/prefix/node_modules/a",
+    "path": "{CWD}/prefix/node_modules/a",
+    "realpath": "{CWD}/prefix/node_modules/a",
     "resolved": null,
     "from": [
       ""
@@ -181,13 +270,15 @@ exports[`test/lib/commands/query.js TAP simple query > should return root object
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   },
   {
     "pkgid": "b@",
     "location": "node_modules/b",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-simple-query/prefix/node_modules/b",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-simple-query/prefix/node_modules/b",
+    "path": "{CWD}/prefix/node_modules/b",
+    "realpath": "{CWD}/prefix/node_modules/b",
     "resolved": null,
     "from": [
       ""
@@ -195,7 +286,9 @@ exports[`test/lib/commands/query.js TAP simple query > should return root object
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   }
 ]
 `
@@ -208,14 +301,16 @@ exports[`test/lib/commands/query.js TAP workspace query > should return workspac
     "_id": "c@1.0.0",
     "pkgid": "c@1.0.0",
     "location": "c",
-    "path": "{CWD}/test/lib/commands/tap-testdir-query-workspace-query/prefix/c",
-    "realpath": "{CWD}/test/lib/commands/tap-testdir-query-workspace-query/prefix/c",
+    "path": "{CWD}/prefix/c",
+    "realpath": "{CWD}/prefix/c",
     "resolved": null,
     "from": [],
     "to": [],
     "dev": false,
     "inBundle": false,
-    "deduped": false
+    "deduped": false,
+    "overridden": false,
+    "queryContext": {}
   }
 ]
 `
