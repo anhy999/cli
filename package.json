@@ -206,7 +206,7 @@
     "licensee": "^8.2.0",
     "nock": "^13.2.4",
     "spawk": "^1.7.1",
-    "tap": "^16.0.1"
+    "tap": "^21.1.0"
   },
   "scripts": {
     "dependencies": "node scripts/bundle-and-gitignore-deps.js && node scripts/dependency-graph.js",

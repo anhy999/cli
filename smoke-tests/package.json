@@ -25,7 +25,7 @@
     "@npmcli/template-oss": "3.5.0",
     "minify-registry-metadata": "^2.2.0",
     "rimraf": "^3.0.2",
-    "tap": "^16.0.1",
+    "tap": "^21.1.0",
     "which": "^2.0.2"
   },
   "author": "GitHub Inc.",
