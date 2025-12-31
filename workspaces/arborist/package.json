@@ -47,7 +47,7 @@
     "chalk": "^4.1.0",
     "minify-registry-metadata": "^2.1.0",
     "nock": "^13.2.0",
-    "tap": "^16.0.1",
+    "tap": "^21.5.0",
     "tcompare": "^5.0.6"
   },
   "scripts": {
