@@ -46,8 +46,8 @@
   },
   "devDependencies": {
     "@npmcli/eslint-config": "^3.0.1",
-    "@npmcli/template-oss": "3.5.0",
-    "tap": "^16.0.1"
+    "@npmcli/template-oss": "4.28.1",
+    "tap": "^21.5.0"
   },
   "dependencies": {
     "@npmcli/disparity-colors": "^2.0.0",
