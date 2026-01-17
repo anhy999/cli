@@ -44,7 +44,7 @@
   "dependencies": {
     "normalize-package-data": "^4.0.0",
     "npm-package-arg": "^9.0.1",
-    "npm-registry-fetch": "^13.0.0",
+    "npm-registry-fetch": "^19.1.1",
     "semver": "^7.3.7",
     "ssri": "^9.0.0"
   },
