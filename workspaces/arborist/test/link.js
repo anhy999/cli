@@ -6,7 +6,7 @@ const Link = require('../lib/link.js')
 const Node = require('../lib/node.js')
 const Shrinkwrap = require('../lib/shrinkwrap.js')
 
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 const normalizePath = path => path.replace(/^[A-Z]:/, '').replace(/\\/g, '/')
 const normalizePaths = obj => {
   obj.path = obj.path && normalizePath(obj.path)
@@ -43,7 +43,7 @@ t.matchSnapshot(normalizePaths(l1), 'instantiate without providing target')
 t.equal(l1.isLink, true, 'link is a link')
 t.same(l1.children.size, 0, 'children is empty')
 l1.children = new Map([[1, 2], [3, 4]])
-t.same(l1.children.size, 0, 'children still empty after being sasigned')
+t.same(l1.children.size, 0, 'children still empty after being assigned')
 l1.children.set('asdf', 'foo')
 t.same(l1.children.size, 0, 'children still empty after setting value')
 
@@ -94,23 +94,6 @@ t.test('link.target setter', async t => {
   t.equal(oldTarget.linksIn.size, 0, 'old target still has no links')
   t.equal(newTarget.linksIn.size, 0, 'new target has no links in now')
 
-  const laterTarget = new Promise((res) =>
-    setTimeout(() => res(new Node({
-      path: '/node-later',
-      realpath: '/node-later',
-      pkg: { name: 'node-later', version: '1.2.3' },
-    }))))
-  link.target = laterTarget
-  t.equal(link.target, laterTarget, 'waiting for a new target to resolve')
-  t.throws(() => link.target = oldTarget, {
-    message: 'cannot set target while awaiting',
-    path: link.path,
-    realpath: link.realpath,
-  })
-  const node = await laterTarget
-  t.equal(link.target, node, 'target resolved and assigned')
-  t.equal(link.package, node.package, 'took on new targets package')
-  t.equal(node.linksIn.has(link), true, 'link in node.linksIn')
   link.target = null
   t.equal(link.target, null, 'target is now null')
   t.strictSame(link.package, {}, 'removed target, package is now empty')
@@ -221,6 +204,138 @@ t.test('link gets version from target', t => {
     root: link,
   })
   t.equal(link.version, '1.2.3')
+  t.end()
+})
+
+t.test('recalculateOutEdgesOverrides forwards overrides to target', t => {
+  const root = new Node({
+    path: '/path/to/root',
+    pkg: {
+      name: 'root',
+      dependencies: { foo: '1.0.0' },
+      overrides: { bar: '2.0.0' },
+    },
+    loadOverrides: true,
+  })
+
+  const target = new Node({
+    path: '/path/to/store/foo',
+    pkg: {
+      name: 'foo',
+      version: '1.0.0',
+      dependencies: { bar: '1.0.0' },
+    },
+    root,
+  })
+
+  const link = new Link({
+    pkg: { name: 'foo', version: '1.0.0' },
+    path: '/path/to/root/node_modules/foo',
+    realpath: '/path/to/store/foo',
+    target,
+    parent: root,
+  })
+
+  // The root has overrides, and the edge from root -> link should propagate them
+  t.ok(root.overrides, 'root has overrides')
+  t.ok(link.overrides, 'link received overrides from root edge')
+  t.ok(link.target.overrides, 'target received overrides forwarded from link')
+
+  // The target's edge to "bar" should have the override applied
+  const barEdge = link.target.edgesOut.get('bar')
+  t.ok(barEdge, 'target has edge to bar')
+  t.ok(barEdge.overrides, 'bar edge has overrides')
+  t.equal(barEdge.spec, '2.0.0', 'bar edge spec is overridden to 2.0.0')
+  t.equal(barEdge.rawSpec, '1.0.0', 'bar edge rawSpec is original 1.0.0')
+
+  // recalculateOutEdgesOverrides is a no-op when target is null
+  link.target = null
+  t.doesNotThrow(() => link.recalculateOutEdgesOverrides(),
+    'no-op when target is null')
+
+  t.end()
+})
+
+t.test('recalculateOutEdgesOverrides does not forward when no rule matches a target dep — npm/cli#9357', t => {
+  // Regression: prior to the fix, Link.recalculateOutEdgesOverrides forwarded the link's full OverrideSet to the target unconditionally.
+  // For a target whose edges are NOT named in any override rule, that flipped target.overrides from undefined to the root's OverrideSet.
+  // Downstream, that "has overrides" state changed canPlaceDep's KEEP-vs-REPLACE decision and made `npm ci` re-resolve lockfile-pinned edges from the registry.
+  // After the fix, propagation is gated on at least one rule whose name matches an edge in target.edgesOut.
+  const root = new Node({
+    path: '/path/to/root',
+    pkg: {
+      name: 'root',
+      dependencies: { foo: '1.0.0' },
+      // override is for "bar", but the linked target only depends on "baz"
+      overrides: { bar: '2.0.0' },
+    },
+    loadOverrides: true,
+  })
+
+  const target = new Node({
+    path: '/path/to/store/foo',
+    pkg: {
+      name: 'foo',
+      version: '1.0.0',
+      dependencies: { baz: '1.0.0' },
+    },
+    root,
+  })
+
+  // eslint-disable-next-line no-new
+  new Link({
+    pkg: { name: 'foo', version: '1.0.0' },
+    path: '/path/to/root/node_modules/foo',
+    realpath: '/path/to/store/foo',
+    target,
+    parent: root,
+  })
+
+  t.ok(root.overrides, 'root has overrides')
+  t.notOk(target.overrides,
+    'target.overrides stays undefined when no rule matches a target dep')
+  const bazEdge = target.edgesOut.get('baz')
+  t.notOk(bazEdge.overrides,
+    'unrelated edge keeps edge.overrides undefined')
+  t.equal(bazEdge.spec, '1.0.0', 'unrelated edge spec is unchanged')
+  t.end()
+})
+
+t.test('recalculateOutEdgesOverrides does not forward a version-qualified rule that does not apply', t => {
+  // The rule names the target's dep but its keySpec (^3) does not intersect the declared range (^1), so the override does not apply and must not flip the target to "has overrides".
+  const root = new Node({
+    path: '/path/to/root',
+    pkg: {
+      name: 'root',
+      dependencies: { foo: '1.0.0' },
+      overrides: { 'leaf@^3': '3.0.0' },
+    },
+    loadOverrides: true,
+  })
+
+  const target = new Node({
+    path: '/path/to/store/foo',
+    pkg: {
+      name: 'foo',
+      version: '1.0.0',
+      dependencies: { leaf: '^1.0.0' },
+    },
+    root,
+  })
+
+  // eslint-disable-next-line no-new
+  new Link({
+    pkg: { name: 'foo', version: '1.0.0' },
+    path: '/path/to/root/node_modules/foo',
+    realpath: '/path/to/store/foo',
+    target,
+    parent: root,
+  })
+
+  t.notOk(target.overrides, 'target.overrides stays undefined for a non-applicable rule')
+  const leafEdge = target.edgesOut.get('leaf')
+  t.notOk(leafEdge.overrides, 'edge keeps edge.overrides undefined')
+  t.equal(leafEdge.spec, '^1.0.0', 'edge spec is unchanged')
   t.end()
 })
 

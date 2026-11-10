@@ -1,0 +1,108 @@
+{{> ciYml }}
+
+  licenses:
+    {{> jobYml jobName="Check Licenses" }}
+      - name: Check Licenses
+        run: {{rootNpmPath}} run licenses
+
+  smoke-tests:	
+    # This cant be tested on Windows because our node_modules directory	
+    # checks in symlinks which are not supported there. This should be	
+    # fixed somehow, because this means some forms of local development	
+    # are likely broken on Windows as well.	
+    {{> jobYml	
+      jobName="Smoke Tests"	
+      jobCheckout=(obj ref="${{ inputs.ref }}")	
+      jobCreateCheck=(obj sha="${{ inputs.check-sha }}")	
+      windowsCI=false	
+      macCI=false	
+    }}	
+      - name: Smoke Tests	
+        run: ./scripts/smoke-tests.sh	
+      - name: Conclude Check	
+        uses: LouisBrunner/checks-action@v1.6.0	
+        if: steps.create-check.outputs.check-id && always()	
+        with:	
+          token: $\{{ secrets.GITHUB_TOKEN }}	
+          conclusion: $\{{ job.status }}	
+          check_id: $\{{ steps.create-check.outputs.check-id }}	
+
+  publish-dryrun:	
+    # This cant be tested on Windows because our node_modules directory	
+    # checks in symlinks which are not supported there. This should be	
+    # fixed somehow, because this means some forms of local development	
+    # are likely broken on Windows as well.	
+    {{> jobYml	
+      jobName="Publish Dry-Run"	
+      jobCheckout=(obj ref="${{ inputs.ref }}")	
+      jobCreateCheck=(obj sha="${{ inputs.check-sha }}")	
+      windowsCI=false	
+      macCI=false	
+    }}	
+      - name: Publish Dry-Run	
+        run: node ./scripts/publish.js --pack-destination=$RUNNER_TEMP --smoke-publish=true 
+      - name: Conclude Check	
+        uses: LouisBrunner/checks-action@v1.6.0	
+        if: steps.create-check.outputs.check-id && always()	
+        with:	
+          token: $\{{ secrets.GITHUB_TOKEN }}	
+          conclusion: $\{{ job.status }}	
+          check_id: $\{{ steps.create-check.outputs.check-id }}
+
+  windows-shims:
+    name: Windows Shims Tests
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      {{> stepsSetupYml }}
+      - name: Setup WSL
+        uses: Vampire/setup-wsl@v2.0.1
+      - name: Setup Cygwin
+        id: setup-cygwin
+        uses: cygwin/cygwin-install-action@v7
+        with:
+          add-to-path: 'false'
+      - name: Verify Cygwin
+        id: verify-cygwin
+        shell: pwsh
+        env:
+          CYGWIN_ROOT: $\{{ steps.setup-cygwin.outputs.root }}
+        run: |
+          if (-not $env:CYGWIN_ROOT) {
+            throw 'Cygwin installer did not report its root directory'
+          }
+          & (Join-Path $env:CYGWIN_ROOT 'bin\bash.exe') --login -c 'exit 0'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cygwin bash failed with exit code $LASTEXITCODE"
+          }
+      - name: Cygwin Diagnostics
+        if: failure() && (steps.setup-cygwin.outcome == 'failure' || steps.verify-cygwin.outcome == 'failure')
+        shell: pwsh
+        env:
+          CYGWIN_ROOT: $\{{ steps.setup-cygwin.outputs.root }}
+        run: |
+          Write-Output "Runner image: $env:ImageOS $env:ImageVersion"
+          if (-not $env:CYGWIN_ROOT) {
+            Write-Warning 'Cygwin installer did not report its root; check the Setup Cygwin step output'
+          } else {
+            Write-Output "Cygwin root: $env:CYGWIN_ROOT"
+            foreach ($name in @('setup.log', 'setup.log.full')) {
+              $log = Join-Path $env:CYGWIN_ROOT "var\log\$name"
+              if (Test-Path -LiteralPath $log) {
+                Write-Output "::group::$log"
+                Get-Content -LiteralPath $log -Tail 200
+                Write-Output '::endgroup::'
+              } else {
+                Write-Warning "Diagnostic log not found: $log"
+              }
+            }
+          }
+      - name: Run Windows Shims Tests
+        run: {{rootNpmPath}} test --ignore-scripts -- test/bin/windows-shims.js --no-coverage
+        env:
+          WINDOWS_SHIMS_TEST: true
+          CYGWIN_ROOT: $\{{ steps.setup-cygwin.outputs.root }}
+      - name: Check Git Status
+        run: node scripts/git-dirty.js

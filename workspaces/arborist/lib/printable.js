@@ -1,7 +1,7 @@
 // helper function to output a clearer visualization
 // of the current node and its descendents
 const localeCompare = require('@isaacs/string-locale-compare')('en')
-const util = require('util')
+const util = require('node:util')
 const relpath = require('./relpath.js')
 
 class ArboristNode {
@@ -51,11 +51,6 @@ class ArboristNode {
     const bd = tree.package && tree.package.bundleDependencies
     if (bd && bd.length) {
       this.bundleDependencies = bd
-    }
-    if (tree.inShrinkwrap) {
-      this.inShrinkwrap = true
-    } else if (tree.hasShrinkwrap) {
-      this.hasShrinkwrap = true
     }
     if (tree.error) {
       this.error = treeError(tree.error)

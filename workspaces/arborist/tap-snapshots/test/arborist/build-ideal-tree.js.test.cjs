@@ -1470,6 +1470,207 @@ ArboristNode {
 }
 `
 
+exports[`test/arborist/build-ideal-tree.js TAP add one workspace to another > tree with workspace a added to workspace c 1`] = `
+ArboristNode {
+  "children": Map {
+    "a" => ArboristLink {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "a",
+          "spec": "file:{CWD}/test/fixtures/workspaces-not-root/packages/a",
+          "type": "workspace",
+        },
+        EdgeIn {
+          "from": "packages/c",
+          "name": "a",
+          "spec": "file:../a",
+          "type": "prod",
+        },
+      },
+      "isWorkspace": true,
+      "location": "node_modules/a",
+      "name": "a",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/node_modules/a",
+      "realpath": "{CWD}/test/fixtures/workspaces-not-root/packages/a",
+      "resolved": "file:../packages/a",
+      "target": ArboristNode {
+        "location": "packages/a",
+      },
+      "version": "1.2.3",
+    },
+    "abbrev" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "abbrev",
+          "spec": "*",
+          "type": "prod",
+        },
+        EdgeIn {
+          "from": "packages/b",
+          "name": "abbrev",
+          "spec": "*",
+          "type": "prod",
+        },
+        EdgeIn {
+          "from": "packages/c",
+          "name": "abbrev",
+          "spec": "*",
+          "type": "prod",
+        },
+      },
+      "location": "node_modules/abbrev",
+      "name": "abbrev",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/node_modules/abbrev",
+      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
+      "version": "1.1.1",
+    },
+    "b" => ArboristLink {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "b",
+          "spec": "file:{CWD}/test/fixtures/workspaces-not-root/packages/b",
+          "type": "workspace",
+        },
+      },
+      "isWorkspace": true,
+      "location": "node_modules/b",
+      "name": "b",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/node_modules/b",
+      "realpath": "{CWD}/test/fixtures/workspaces-not-root/packages/b",
+      "resolved": "file:../packages/b",
+      "target": ArboristNode {
+        "location": "packages/b",
+      },
+      "version": "1.2.3",
+    },
+    "c" => ArboristLink {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "c",
+          "spec": "file:{CWD}/test/fixtures/workspaces-not-root/packages/c",
+          "type": "workspace",
+        },
+      },
+      "isWorkspace": true,
+      "location": "node_modules/c",
+      "name": "c",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/node_modules/c",
+      "realpath": "{CWD}/test/fixtures/workspaces-not-root/packages/c",
+      "resolved": "file:../packages/c",
+      "target": ArboristNode {
+        "location": "packages/c",
+      },
+      "version": "1.2.3",
+    },
+    "wrappy" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "wrappy",
+          "spec": "1.0.0",
+          "type": "prod",
+        },
+      },
+      "location": "node_modules/wrappy",
+      "name": "wrappy",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/node_modules/wrappy",
+      "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.0.tgz",
+      "version": "1.0.0",
+    },
+  },
+  "edgesOut": Map {
+    "a" => EdgeOut {
+      "name": "a",
+      "spec": "file:{CWD}/test/fixtures/workspaces-not-root/packages/a",
+      "to": "node_modules/a",
+      "type": "workspace",
+    },
+    "abbrev" => EdgeOut {
+      "name": "abbrev",
+      "spec": "*",
+      "to": "node_modules/abbrev",
+      "type": "prod",
+    },
+    "b" => EdgeOut {
+      "name": "b",
+      "spec": "file:{CWD}/test/fixtures/workspaces-not-root/packages/b",
+      "to": "node_modules/b",
+      "type": "workspace",
+    },
+    "c" => EdgeOut {
+      "name": "c",
+      "spec": "file:{CWD}/test/fixtures/workspaces-not-root/packages/c",
+      "to": "node_modules/c",
+      "type": "workspace",
+    },
+    "wrappy" => EdgeOut {
+      "name": "wrappy",
+      "spec": "1.0.0",
+      "to": "node_modules/wrappy",
+      "type": "prod",
+    },
+  },
+  "fsChildren": Set {
+    ArboristNode {
+      "isWorkspace": true,
+      "location": "packages/a",
+      "name": "a",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/packages/a",
+      "version": "1.2.3",
+    },
+    ArboristNode {
+      "edgesOut": Map {
+        "abbrev" => EdgeOut {
+          "name": "abbrev",
+          "spec": "*",
+          "to": "node_modules/abbrev",
+          "type": "prod",
+        },
+      },
+      "isWorkspace": true,
+      "location": "packages/b",
+      "name": "b",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/packages/b",
+      "version": "1.2.3",
+    },
+    ArboristNode {
+      "edgesOut": Map {
+        "a" => EdgeOut {
+          "name": "a",
+          "spec": "file:../a",
+          "to": "node_modules/a",
+          "type": "prod",
+        },
+        "abbrev" => EdgeOut {
+          "name": "abbrev",
+          "spec": "*",
+          "to": "node_modules/abbrev",
+          "type": "prod",
+        },
+      },
+      "isWorkspace": true,
+      "location": "packages/c",
+      "name": "c",
+      "path": "{CWD}/test/fixtures/workspaces-not-root/packages/c",
+      "version": "1.2.3",
+    },
+  },
+  "isProjectRoot": true,
+  "location": "",
+  "name": "workspaces-not-root",
+  "path": "{CWD}/test/fixtures/workspaces-not-root",
+  "workspaces": Map {
+    "a" => "packages/a",
+    "b" => "packages/b",
+    "c" => "packages/c",
+  },
+}
+`
+
 exports[`test/arborist/build-ideal-tree.js TAP add packages to workspaces, not root > tree with abbrev removed from a and b 1`] = `
 ArboristNode {
   "children": Map {
@@ -7893,160 +8094,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP bad shrinkwrap file > bad shrinkwrap 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/testing-peer-deps-b" => ArboristNode {
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/testing-peer-deps-b",
-          "spec": "1",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "@isaacs/testing-peer-deps-c" => EdgeOut {
-          "name": "@isaacs/testing-peer-deps-c",
-          "spec": "1",
-          "to": "node_modules/@isaacs/testing-peer-deps-c",
-          "type": "peer",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-peer-deps-b",
-      "name": "@isaacs/testing-peer-deps-b",
-      "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw/node_modules/@isaacs/testing-peer-deps-b",
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-b/-/testing-peer-deps-b-1.2.4.tgz",
-      "version": "1.2.4",
-    },
-    "@isaacs/testing-peer-deps-c" => ArboristNode {
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "node_modules/@isaacs/testing-peer-deps-b",
-          "name": "@isaacs/testing-peer-deps-c",
-          "spec": "1",
-          "type": "peer",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-peer-deps-c",
-      "name": "@isaacs/testing-peer-deps-c",
-      "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw/node_modules/@isaacs/testing-peer-deps-c",
-      "peer": true,
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-c/-/testing-peer-deps-c-1.2.3.tgz",
-      "version": "1.2.3",
-    },
-    "@isaacs/testing-peer-deps-d" => ArboristNode {
-      "children": Map {
-        "@isaacs/testing-peer-deps-a" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-peer-deps-d",
-              "name": "@isaacs/testing-peer-deps-a",
-              "spec": "2",
-              "type": "prod",
-            },
-          },
-          "edgesOut": Map {
-            "@isaacs/testing-peer-deps-b" => EdgeOut {
-              "name": "@isaacs/testing-peer-deps-b",
-              "spec": "2",
-              "to": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-              "type": "peer",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-          "name": "@isaacs/testing-peer-deps-a",
-          "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw/node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-a/-/testing-peer-deps-a-2.0.0.tgz",
-          "version": "2.0.0",
-        },
-        "@isaacs/testing-peer-deps-b" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-              "name": "@isaacs/testing-peer-deps-b",
-              "spec": "2",
-              "type": "peer",
-            },
-          },
-          "edgesOut": Map {
-            "@isaacs/testing-peer-deps-c" => EdgeOut {
-              "name": "@isaacs/testing-peer-deps-c",
-              "spec": "2",
-              "to": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-c",
-              "type": "peer",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-          "name": "@isaacs/testing-peer-deps-b",
-          "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw/node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-          "peer": true,
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-b/-/testing-peer-deps-b-2.0.1.tgz",
-          "version": "2.0.1",
-        },
-        "@isaacs/testing-peer-deps-c" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-              "name": "@isaacs/testing-peer-deps-c",
-              "spec": "2",
-              "type": "peer",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-c",
-          "name": "@isaacs/testing-peer-deps-c",
-          "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw/node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-c",
-          "peer": true,
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-c/-/testing-peer-deps-c-2.0.0.tgz",
-          "version": "2.0.0",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/testing-peer-deps-d",
-          "spec": "2",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "@isaacs/testing-peer-deps-a" => EdgeOut {
-          "name": "@isaacs/testing-peer-deps-a",
-          "spec": "2",
-          "to": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-          "type": "prod",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-peer-deps-d",
-      "name": "@isaacs/testing-peer-deps-d",
-      "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw/node_modules/@isaacs/testing-peer-deps-d",
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-d/-/testing-peer-deps-d-2.0.0.tgz",
-      "version": "2.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/testing-peer-deps-b" => EdgeOut {
-      "name": "@isaacs/testing-peer-deps-b",
-      "spec": "1",
-      "to": "node_modules/@isaacs/testing-peer-deps-b",
-      "type": "prod",
-    },
-    "@isaacs/testing-peer-deps-d" => EdgeOut {
-      "name": "@isaacs/testing-peer-deps-d",
-      "spec": "2",
-      "to": "node_modules/@isaacs/testing-peer-deps-d",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "testing-peer-deps-bad-sw",
-  "packageName": "@isaacs/testing-peer-deps",
-  "path": "{CWD}/test/fixtures/testing-peer-deps-bad-sw",
-  "version": "2.0.0",
-}
-`
-
 exports[`test/arborist/build-ideal-tree.js TAP bundle deps example 1, complete:true > no missing deps, because complete: true 1`] = `
 ArboristNode {
   "children": Map {
@@ -14413,7 +14460,7 @@ Object {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets dont warn > root tree 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets do not warn > root tree 1`] = `
 ArboristNode {
   "children": Map {
     "@lukekarrys/workspace-peer-dep-infinite-loop-a" => ArboristNode {
@@ -14555,7 +14602,7 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets dont warn > root warnings 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets do not warn > root warnings 1`] = `
 Object {
   "code": "ERESOLVE",
   "current": Object {
@@ -14729,7 +14776,7 @@ Object {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets dont warn > workspace tree 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets do not warn > workspace tree 1`] = `
 ArboristNode {
   "children": Map {
     "@lukekarrys/workspace-peer-dep-infinite-loop-a" => ArboristNode {
@@ -14912,7 +14959,7 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets dont warn > workspace warnings 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP competing peerSets resolve in both root and workspace overlapping peerSets do not warn > workspace warnings 1`] = `
 Object {
   "code": "ERESOLVE",
   "current": Object {
@@ -16788,6 +16835,7 @@ ArboristNode {
               "type": "peerOptional",
             },
           },
+          "extraneous": true,
           "location": "node_modules/@isaacs/test-conflicted-optional-peer-dep-meta-peer-optional/node_modules/@isaacs/test-conflicted-optional-peer-dep-peer",
           "name": "@isaacs/test-conflicted-optional-peer-dep-peer",
           "optional": true,
@@ -16922,69 +16970,6 @@ ArboristNode {
   "name": "omit-peer-optional",
   "packageName": "@isaacs/test-conflicted-optional-peer-dep",
   "path": "{CWD}/test/fixtures/test-conflicted-optional-peer-dep/omit-peer-optional",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/build-ideal-tree.js TAP do add shrinkwrapped deps when complete:true is set > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/fixtures/shrinkwrapped-dep-no-lock/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/fixtures/shrinkwrapped-dep-no-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "shrinkwrapped-dep-no-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/fixtures/shrinkwrapped-dep-no-lock",
   "version": "1.0.0",
 }
 `
@@ -17433,52 +17418,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP do not add shrinkwrapped deps > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "error": "MISSING",
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": null,
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/fixtures/shrinkwrapped-dep-no-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "shrinkwrapped-dep-no-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/fixtures/shrinkwrapped-dep-no-lock",
-  "version": "1.0.0",
-}
-`
-
 exports[`test/arborist/build-ideal-tree.js TAP do not fail if root peerDep looser than meta peerDep > must match snapshot 1`] = `
 ArboristNode {
   "children": Map {
@@ -17552,179 +17491,7 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP do not update shrinkwrapped deps > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "shrinkwrapped-dep-with-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/build-ideal-tree.js TAP do not update shrinkwrapped deps when complete:true is set > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "shrinkwrapped-dep-with-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/build-ideal-tree.js TAP do not update shrinkwrapped deps, ignore lockfile > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "error": "MISSING",
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": null,
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "shrinkwrapped-dep-with-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/fixtures/shrinkwrapped-dep-with-lock",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/build-ideal-tree.js TAP dont get confused if root matches duped metadep > must match snapshot 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP do not get confused if root matches duped metadep > must match snapshot 1`] = `
 ArboristNode {
   "children": Map {
     "test-root-matches-metadep" => ArboristNode {
@@ -74471,6 +74238,315 @@ exports[`test/arborist/build-ideal-tree.js TAP more peer dep conflicts metadeps 
 Array []
 `
 
+exports[`test/arborist/build-ideal-tree.js TAP more peer dep conflicts peerDep replacement of top level dep with different version resulting detached top level dep > default result 1`] = `
+ArboristNode {
+  "children": Map {
+    "@test/a" => ArboristNode {
+      "dev": true,
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@test/a",
+          "spec": "^1.1.0",
+          "type": "dev",
+        },
+        EdgeIn {
+          "from": "node_modules/@test/b",
+          "name": "@test/a",
+          "spec": "1.1.0",
+          "type": "peer",
+        },
+      },
+      "edgesOut": Map {
+        "@test/b" => EdgeOut {
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "to": "node_modules/@test/b",
+          "type": "peerOptional",
+        },
+        "@test/c" => EdgeOut {
+          "name": "@test/c",
+          "spec": "1.1.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+        "lodash" => EdgeOut {
+          "name": "lodash",
+          "spec": "^4.17.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+        "uniq" => EdgeOut {
+          "name": "uniq",
+          "spec": "^1.0.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+      },
+      "location": "node_modules/@test/a",
+      "name": "@test/a",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep/node_modules/@test/a",
+      "resolved": "http://localhost:4873/@test/a/-/a-1.1.0.tgz",
+      "version": "1.1.0",
+    },
+    "@test/b" => ArboristNode {
+      "dev": true,
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "type": "dev",
+        },
+        EdgeIn {
+          "from": "node_modules/@test/a",
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "type": "peerOptional",
+        },
+      },
+      "edgesOut": Map {
+        "@test/a" => EdgeOut {
+          "name": "@test/a",
+          "spec": "1.1.0",
+          "to": "node_modules/@test/a",
+          "type": "peer",
+        },
+      },
+      "location": "node_modules/@test/b",
+      "name": "@test/b",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep/node_modules/@test/b",
+      "resolved": "http://localhost:4873/@test/b/-/b-1.1.0.tgz",
+      "version": "1.1.0",
+    },
+  },
+  "edgesOut": Map {
+    "@test/a" => EdgeOut {
+      "name": "@test/a",
+      "spec": "^1.1.0",
+      "to": "node_modules/@test/a",
+      "type": "dev",
+    },
+    "@test/b" => EdgeOut {
+      "name": "@test/b",
+      "spec": "1.1.0",
+      "to": "node_modules/@test/b",
+      "type": "dev",
+    },
+  },
+  "isProjectRoot": true,
+  "location": "",
+  "name": "tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep",
+  "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep",
+}
+`
+
+exports[`test/arborist/build-ideal-tree.js TAP more peer dep conflicts peerDep replacement of top level dep with different version resulting detached top level dep > force result 1`] = `
+ArboristNode {
+  "children": Map {
+    "@test/a" => ArboristNode {
+      "dev": true,
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@test/a",
+          "spec": "^1.1.0",
+          "type": "dev",
+        },
+        EdgeIn {
+          "from": "node_modules/@test/b",
+          "name": "@test/a",
+          "spec": "1.1.0",
+          "type": "peer",
+        },
+      },
+      "edgesOut": Map {
+        "@test/b" => EdgeOut {
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "to": "node_modules/@test/b",
+          "type": "peerOptional",
+        },
+        "@test/c" => EdgeOut {
+          "name": "@test/c",
+          "spec": "1.1.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+        "lodash" => EdgeOut {
+          "name": "lodash",
+          "spec": "^4.17.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+        "uniq" => EdgeOut {
+          "name": "uniq",
+          "spec": "^1.0.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+      },
+      "location": "node_modules/@test/a",
+      "name": "@test/a",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep/node_modules/@test/a",
+      "resolved": "http://localhost:4873/@test/a/-/a-1.1.0.tgz",
+      "version": "1.1.0",
+    },
+    "@test/b" => ArboristNode {
+      "dev": true,
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "type": "dev",
+        },
+        EdgeIn {
+          "from": "node_modules/@test/a",
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "type": "peerOptional",
+        },
+      },
+      "edgesOut": Map {
+        "@test/a" => EdgeOut {
+          "name": "@test/a",
+          "spec": "1.1.0",
+          "to": "node_modules/@test/a",
+          "type": "peer",
+        },
+      },
+      "location": "node_modules/@test/b",
+      "name": "@test/b",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep/node_modules/@test/b",
+      "resolved": "http://localhost:4873/@test/b/-/b-1.1.0.tgz",
+      "version": "1.1.0",
+    },
+  },
+  "edgesOut": Map {
+    "@test/a" => EdgeOut {
+      "name": "@test/a",
+      "spec": "^1.1.0",
+      "to": "node_modules/@test/a",
+      "type": "dev",
+    },
+    "@test/b" => EdgeOut {
+      "name": "@test/b",
+      "spec": "1.1.0",
+      "to": "node_modules/@test/b",
+      "type": "dev",
+    },
+  },
+  "isProjectRoot": true,
+  "location": "",
+  "name": "tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep",
+  "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep",
+}
+`
+
+exports[`test/arborist/build-ideal-tree.js TAP more peer dep conflicts peerDep replacement of top level dep with different version resulting detached top level dep > strict result 1`] = `
+ArboristNode {
+  "children": Map {
+    "@test/a" => ArboristNode {
+      "dev": true,
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@test/a",
+          "spec": "^1.1.0",
+          "type": "dev",
+        },
+        EdgeIn {
+          "from": "node_modules/@test/b",
+          "name": "@test/a",
+          "spec": "1.1.0",
+          "type": "peer",
+        },
+      },
+      "edgesOut": Map {
+        "@test/b" => EdgeOut {
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "to": "node_modules/@test/b",
+          "type": "peerOptional",
+        },
+        "@test/c" => EdgeOut {
+          "name": "@test/c",
+          "spec": "1.1.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+        "lodash" => EdgeOut {
+          "name": "lodash",
+          "spec": "^4.17.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+        "uniq" => EdgeOut {
+          "name": "uniq",
+          "spec": "^1.0.0",
+          "to": null,
+          "type": "peerOptional",
+        },
+      },
+      "location": "node_modules/@test/a",
+      "name": "@test/a",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep/node_modules/@test/a",
+      "resolved": "http://localhost:4873/@test/a/-/a-1.1.0.tgz",
+      "version": "1.1.0",
+    },
+    "@test/b" => ArboristNode {
+      "dev": true,
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "type": "dev",
+        },
+        EdgeIn {
+          "from": "node_modules/@test/a",
+          "name": "@test/b",
+          "spec": "1.1.0",
+          "type": "peerOptional",
+        },
+      },
+      "edgesOut": Map {
+        "@test/a" => EdgeOut {
+          "name": "@test/a",
+          "spec": "1.1.0",
+          "to": "node_modules/@test/a",
+          "type": "peer",
+        },
+      },
+      "location": "node_modules/@test/b",
+      "name": "@test/b",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep/node_modules/@test/b",
+      "resolved": "http://localhost:4873/@test/b/-/b-1.1.0.tgz",
+      "version": "1.1.0",
+    },
+  },
+  "edgesOut": Map {
+    "@test/a" => EdgeOut {
+      "name": "@test/a",
+      "spec": "^1.1.0",
+      "to": "node_modules/@test/a",
+      "type": "dev",
+    },
+    "@test/b" => EdgeOut {
+      "name": "@test/b",
+      "spec": "1.1.0",
+      "to": "node_modules/@test/b",
+      "type": "dev",
+    },
+  },
+  "isProjectRoot": true,
+  "location": "",
+  "name": "tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep",
+  "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-more-peer-dep-conflicts-peerDep-replacement-of-top-level-dep-with-different-version-resulting-detached-top-level-dep",
+}
+`
+
 exports[`test/arborist/build-ideal-tree.js TAP more peer dep conflicts prod dep directly on conflicted peer, full peer set, newer > force result 1`] = `
 ArboristNode {
   "children": Map {
@@ -77667,11 +77743,34 @@ ArboristNode {
 
 exports[`test/arborist/build-ideal-tree.js TAP optional dependency failures > optional-dep-enotarget 1`] = `
 ArboristNode {
+  "children": Map {
+    "tap" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "error": "INVALID",
+          "from": "",
+          "name": "tap",
+          "spec": "9999.0000.9999",
+          "type": "optional",
+        },
+      },
+      "errors": Array [
+        Object {
+          "code": "ETARGET",
+        },
+      ],
+      "location": "node_modules/tap",
+      "name": "tap",
+      "optional": true,
+      "path": "{CWD}/test/fixtures/optional-dep-enotarget/node_modules/tap",
+    },
+  },
   "edgesOut": Map {
     "tap" => EdgeOut {
+      "error": "INVALID",
       "name": "tap",
       "spec": "9999.0000.9999",
-      "to": null,
+      "to": "node_modules/tap",
       "type": "optional",
     },
   },
@@ -77686,11 +77785,32 @@ ArboristNode {
 
 exports[`test/arborist/build-ideal-tree.js TAP optional dependency failures > optional-dep-missing 1`] = `
 ArboristNode {
+  "children": Map {
+    "@isaacs/this-does-not-exist-at-all" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@isaacs/this-does-not-exist-at-all",
+          "spec": "*",
+          "type": "optional",
+        },
+      },
+      "errors": Array [
+        Object {
+          "code": "E404",
+        },
+      ],
+      "location": "node_modules/@isaacs/this-does-not-exist-at-all",
+      "name": "@isaacs/this-does-not-exist-at-all",
+      "optional": true,
+      "path": "{CWD}/test/fixtures/optional-dep-missing/node_modules/@isaacs/this-does-not-exist-at-all",
+    },
+  },
   "edgesOut": Map {
     "@isaacs/this-does-not-exist-at-all" => EdgeOut {
       "name": "@isaacs/this-does-not-exist-at-all",
       "spec": "*",
-      "to": null,
+      "to": "node_modules/@isaacs/this-does-not-exist-at-all",
       "type": "optional",
     },
   },
@@ -77705,11 +77825,60 @@ ArboristNode {
 
 exports[`test/arborist/build-ideal-tree.js TAP optional dependency failures > optional-metadep-enotarget 1`] = `
 ArboristNode {
+  "children": Map {
+    "@isaacs/prod-dep-enotarget" => ArboristNode {
+      "children": Map {
+        "tap" => ArboristNode {
+          "edgesIn": Set {
+            EdgeIn {
+              "error": "INVALID",
+              "from": "node_modules/@isaacs/prod-dep-enotarget",
+              "name": "tap",
+              "spec": "9999.0000.9999",
+              "type": "prod",
+            },
+          },
+          "errors": Array [
+            Object {
+              "code": "ETARGET",
+            },
+          ],
+          "location": "node_modules/@isaacs/prod-dep-enotarget/node_modules/tap",
+          "name": "tap",
+          "optional": true,
+          "path": "{CWD}/test/fixtures/optional-metadep-enotarget/node_modules/@isaacs/prod-dep-enotarget/node_modules/tap",
+        },
+      },
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@isaacs/prod-dep-enotarget",
+          "spec": "*",
+          "type": "optional",
+        },
+      },
+      "edgesOut": Map {
+        "tap" => EdgeOut {
+          "error": "INVALID",
+          "name": "tap",
+          "spec": "9999.0000.9999",
+          "to": "node_modules/@isaacs/prod-dep-enotarget/node_modules/tap",
+          "type": "prod",
+        },
+      },
+      "location": "node_modules/@isaacs/prod-dep-enotarget",
+      "name": "@isaacs/prod-dep-enotarget",
+      "optional": true,
+      "path": "{CWD}/test/fixtures/optional-metadep-enotarget/node_modules/@isaacs/prod-dep-enotarget",
+      "resolved": "https://registry.npmjs.org/@isaacs/prod-dep-enotarget/-/prod-dep-enotarget-1.0.0.tgz",
+      "version": "1.0.0",
+    },
+  },
   "edgesOut": Map {
     "@isaacs/prod-dep-enotarget" => EdgeOut {
       "name": "@isaacs/prod-dep-enotarget",
       "spec": "*",
-      "to": null,
+      "to": "node_modules/@isaacs/prod-dep-enotarget",
       "type": "optional",
     },
   },
@@ -77723,11 +77892,58 @@ ArboristNode {
 
 exports[`test/arborist/build-ideal-tree.js TAP optional dependency failures > optional-metadep-missing 1`] = `
 ArboristNode {
+  "children": Map {
+    "@isaacs/testing-prod-dep-metadata-missing" => ArboristNode {
+      "children": Map {
+        "@isaacs/this-does-not-exist-at-all" => ArboristNode {
+          "edgesIn": Set {
+            EdgeIn {
+              "from": "node_modules/@isaacs/testing-prod-dep-metadata-missing",
+              "name": "@isaacs/this-does-not-exist-at-all",
+              "spec": "*",
+              "type": "prod",
+            },
+          },
+          "errors": Array [
+            Object {
+              "code": "E404",
+            },
+          ],
+          "location": "node_modules/@isaacs/testing-prod-dep-metadata-missing/node_modules/@isaacs/this-does-not-exist-at-all",
+          "name": "@isaacs/this-does-not-exist-at-all",
+          "optional": true,
+          "path": "{CWD}/test/fixtures/optional-metadep-missing/node_modules/@isaacs/testing-prod-dep-metadata-missing/node_modules/@isaacs/this-does-not-exist-at-all",
+        },
+      },
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "@isaacs/testing-prod-dep-metadata-missing",
+          "spec": "*",
+          "type": "optional",
+        },
+      },
+      "edgesOut": Map {
+        "@isaacs/this-does-not-exist-at-all" => EdgeOut {
+          "name": "@isaacs/this-does-not-exist-at-all",
+          "spec": "*",
+          "to": "node_modules/@isaacs/testing-prod-dep-metadata-missing/node_modules/@isaacs/this-does-not-exist-at-all",
+          "type": "prod",
+        },
+      },
+      "location": "node_modules/@isaacs/testing-prod-dep-metadata-missing",
+      "name": "@isaacs/testing-prod-dep-metadata-missing",
+      "optional": true,
+      "path": "{CWD}/test/fixtures/optional-metadep-missing/node_modules/@isaacs/testing-prod-dep-metadata-missing",
+      "resolved": "https://registry.npmjs.org/@isaacs/testing-prod-dep-metadata-missing/-/testing-prod-dep-metadata-missing-1.0.0.tgz",
+      "version": "1.0.0",
+    },
+  },
   "edgesOut": Map {
     "@isaacs/testing-prod-dep-metadata-missing" => EdgeOut {
       "name": "@isaacs/testing-prod-dep-metadata-missing",
       "spec": "*",
-      "to": null,
+      "to": "node_modules/@isaacs/testing-prod-dep-metadata-missing",
       "type": "optional",
     },
   },
@@ -97021,6 +97237,7 @@ ArboristNode {
           "type": "peerOptional",
         },
       },
+      "extraneous": true,
       "location": "node_modules/abbrev",
       "name": "abbrev",
       "optional": true,
@@ -97246,7 +97463,7 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP push conflicted peer deps deeper in to the tree to solve > must match snapshot 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP push conflicted peer deps deeper into the tree to solve > must match snapshot 1`] = `
 ArboristNode {
   "children": Map {
     "@isaacs/testing-peer-dep-conflict-chain-a" => ArboristNode {
@@ -97720,11 +97937,25 @@ ArboristNode {
 }
 `
 
+exports[`test/arborist/build-ideal-tree.js TAP should take devEngines in account > must match snapshot 1`] = `
+{
+  "name": "empty-update",
+  "lockfileVersion": 3,
+  "requires": true,
+  "packages": {
+    "": {
+      "name": "empty-update"
+    }
+  }
+}
+
+`
+
 exports[`test/arborist/build-ideal-tree.js TAP store files with a custom indenting > must match snapshot 1`] = `
 {
 	"name": "tab-indented-package-json",
 	"version": "1.0.0",
-	"lockfileVersion": 2,
+	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
@@ -97737,14 +97968,8 @@ exports[`test/arborist/build-ideal-tree.js TAP store files with a custom indenti
 		"node_modules/abbrev": {
 			"version": "1.1.1",
 			"resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-			"integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-		}
-	},
-	"dependencies": {
-		"abbrev": {
-			"version": "1.1.1",
-			"resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-			"integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+			"integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+			"license": "ISC"
 		}
 	}
 }
@@ -108685,7 +108910,7 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/build-ideal-tree.js TAP tap vs react15 with legacy shrinkwrap > tap collision with legacy sw file 1`] = `
+exports[`test/arborist/build-ideal-tree.js TAP tap vs react15 with legacy lockfile > tap collision with legacy lockfile 1`] = `
 ArboristNode {
   "children": Map {
     "@babel/code-frame" => ArboristNode {
@@ -159651,6 +159876,95 @@ ArboristNode {
   "workspaces": Map {
     "workspace-a" => "workspace-a",
     "workspace-b" => "workspace-b",
+  },
+}
+`
+
+exports[`test/arborist/build-ideal-tree.js TAP workspaces should allow cyclic peer dependencies between workspaces and packages from a repository > must match snapshot 1`] = `
+ArboristNode {
+  "children": Map {
+    "foo" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "workspace-a",
+          "name": "foo",
+          "spec": ">=1.0.0",
+          "type": "prod",
+        },
+      },
+      "edgesOut": Map {
+        "workspace-a" => EdgeOut {
+          "name": "workspace-a",
+          "spec": "1.0.0",
+          "to": "node_modules/workspace-a",
+          "type": "peer",
+        },
+      },
+      "location": "node_modules/foo",
+      "name": "foo",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository/node_modules/foo",
+      "resolved": "https://registry.npmjs.org/foo/-/foo-1.0.0.tgz",
+      "version": "1.0.0",
+    },
+    "workspace-a" => ArboristLink {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "workspace-a",
+          "spec": "file:{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository/workspace-a",
+          "type": "workspace",
+        },
+        EdgeIn {
+          "from": "node_modules/foo",
+          "name": "workspace-a",
+          "spec": "1.0.0",
+          "type": "peer",
+        },
+      },
+      "isWorkspace": true,
+      "location": "node_modules/workspace-a",
+      "name": "workspace-a",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository/node_modules/workspace-a",
+      "realpath": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository/workspace-a",
+      "resolved": "file:../workspace-a",
+      "target": ArboristNode {
+        "location": "workspace-a",
+      },
+      "version": "1.0.0",
+    },
+  },
+  "edgesOut": Map {
+    "workspace-a" => EdgeOut {
+      "name": "workspace-a",
+      "spec": "file:{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository/workspace-a",
+      "to": "node_modules/workspace-a",
+      "type": "workspace",
+    },
+  },
+  "fsChildren": Set {
+    ArboristNode {
+      "edgesOut": Map {
+        "foo" => EdgeOut {
+          "name": "foo",
+          "spec": ">=1.0.0",
+          "to": "node_modules/foo",
+          "type": "prod",
+        },
+      },
+      "isWorkspace": true,
+      "location": "workspace-a",
+      "name": "workspace-a",
+      "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository/workspace-a",
+      "version": "1.0.0",
+    },
+  },
+  "isProjectRoot": true,
+  "location": "",
+  "name": "tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository",
+  "packageName": "root",
+  "path": "{CWD}/test/arborist/tap-testdir-build-ideal-tree-workspaces-should-allow-cyclic-peer-dependencies-between-workspaces-and-packages-from-a-repository",
+  "workspaces": Map {
+    "workspace-a" => "workspace-a",
   },
 }
 `

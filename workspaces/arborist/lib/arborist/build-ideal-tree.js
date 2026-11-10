@@ -1,20 +1,18 @@
 // mixin implementing the buildIdealTree method
 const localeCompare = require('@isaacs/string-locale-compare')('en')
-const rpj = require('read-package-json-fast')
+const PackageJson = require('@npmcli/package-json')
 const npa = require('npm-package-arg')
 const pacote = require('pacote')
 const cacache = require('cacache')
-const promiseCallLimit = require('promise-call-limit')
+const { callLimit: promiseCallLimit } = require('promise-call-limit')
 const realpath = require('../../lib/realpath.js')
-const { resolve, dirname } = require('path')
-const { promisify } = require('util')
+const { resolve, dirname, sep } = require('node:path')
 const treeCheck = require('../tree-check.js')
-const readdir = promisify(require('readdir-scoped-modules'))
-const fs = require('fs')
-const lstat = promisify(fs.lstat)
-const readlink = promisify(fs.readlink)
+const { readdirScoped } = require('@npmcli/fs')
+const { lstat, readlink } = require('node:fs/promises')
 const { depth } = require('treeverse')
-const log = require('proc-log')
+const { log, time } = require('proc-log')
+const { redact } = require('@npmcli/redact')
 
 const {
   OK,
@@ -26,154 +24,124 @@ const PlaceDep = require('../place-dep.js')
 const debug = require('../debug.js')
 const fromPath = require('../from-path.js')
 const calcDepFlags = require('../calc-dep-flags.js')
+const { isReleaseAgeExcluded, trustedSpecName } = require('../release-age-exclude.js')
+const { resolvePatchedDependencies } = require('../patched-dependencies.js')
+const PackageExtensions = require('../package-extensions.js')
+const NpmExtension = require('../npm-extension.js')
+const { hasExtensionFile } = require('../npm-extension.js')
 const Shrinkwrap = require('../shrinkwrap.js')
 const { defaultLockfileVersion } = Shrinkwrap
 const Node = require('../node.js')
 const Link = require('../link.js')
+
+// Maps a parsed spec.type to the corresponding allow-* arborist option name.
+// Hoisted to module scope so #checkAllow doesn't re-allocate it per call.
+const ALLOW_OPTION_FOR_TYPE = {
+  git: 'allowGit',
+  remote: 'allowRemote',
+  file: 'allowFile',
+  directory: 'allowDirectory',
+}
 const addRmPkgDeps = require('../add-rm-pkg-deps.js')
 const optionalSet = require('../optional-set.js')
 const { checkEngine, checkPlatform } = require('npm-install-checks')
-
 const relpath = require('../relpath.js')
+const resetDepFlags = require('../reset-dep-flags.js')
 
 // note: some of these symbols are shared so we can hit
 // them with unit tests and reuse them across mixins
-const _complete = Symbol('complete')
-const _depsSeen = Symbol('depsSeen')
-const _depsQueue = Symbol('depsQueue')
-const _currentDep = Symbol('currentDep')
 const _updateAll = Symbol.for('updateAll')
-const _mutateTree = Symbol('mutateTree')
 const _flagsSuspect = Symbol.for('flagsSuspect')
-const _workspaces = Symbol.for('workspaces')
-const _prune = Symbol('prune')
-const _preferDedupe = Symbol('preferDedupe')
-const _legacyBundling = Symbol('legacyBundling')
-const _parseSettings = Symbol('parseSettings')
-const _initTree = Symbol('initTree')
-const _applyUserRequests = Symbol('applyUserRequests')
-const _applyUserRequestsToNode = Symbol('applyUserRequestsToNode')
-const _inflateAncientLockfile = Symbol('inflateAncientLockfile')
-const _buildDeps = Symbol('buildDeps')
-const _buildDepStep = Symbol('buildDepStep')
-const _nodeFromEdge = Symbol('nodeFromEdge')
-const _nodeFromSpec = Symbol('nodeFromSpec')
-const _fetchManifest = Symbol('fetchManifest')
-const _problemEdges = Symbol('problemEdges')
-const _manifests = Symbol('manifests')
-const _loadWorkspaces = Symbol.for('loadWorkspaces')
-const _linkFromSpec = Symbol('linkFromSpec')
-const _loadPeerSet = Symbol('loadPeerSet')
+const _setWorkspaces = Symbol.for('setWorkspaces')
 const _updateNames = Symbol.for('updateNames')
-const _fixDepFlags = Symbol('fixDepFlags')
-const _resolveLinks = Symbol('resolveLinks')
-const _rootNodeFromPackage = Symbol('rootNodeFromPackage')
-const _add = Symbol('add')
 const _resolvedAdd = Symbol.for('resolvedAdd')
-const _queueNamedUpdates = Symbol('queueNamedUpdates')
-const _queueVulnDependents = Symbol('queueVulnDependents')
-const _avoidRange = Symbol('avoidRange')
-const _shouldUpdateNode = Symbol('shouldUpdateNode')
-const resetDepFlags = require('../reset-dep-flags.js')
-const _loadFailures = Symbol('loadFailures')
-const _pruneFailedOptional = Symbol('pruneFailedOptional')
-const _linkNodes = Symbol('linkNodes')
-const _follow = Symbol('follow')
-const _globalStyle = Symbol('globalStyle')
-const _globalRootNode = Symbol('globalRootNode')
-const _isVulnerable = Symbol.for('isVulnerable')
-const _usePackageLock = Symbol.for('usePackageLock')
 const _rpcache = Symbol.for('realpathCache')
 const _stcache = Symbol.for('statCache')
-const _updateFilePath = Symbol('updateFilePath')
-const _followSymlinkPath = Symbol('followSymlinkPath')
-const _getRelpathSpec = Symbol('getRelpathSpec')
-const _retrieveSpecName = Symbol('retrieveSpecName')
-const _strictPeerDeps = Symbol('strictPeerDeps')
-const _checkEngineAndPlatform = Symbol('checkEngineAndPlatform')
-const _checkEngine = Symbol('checkEngine')
-const _checkPlatform = Symbol('checkPlatform')
-const _virtualRoots = Symbol('virtualRoots')
-const _virtualRoot = Symbol('virtualRoot')
-const _includeWorkspaceRoot = Symbol.for('includeWorkspaceRoot')
-
-const _failPeerConflict = Symbol('failPeerConflict')
-const _explainPeerConflict = Symbol('explainPeerConflict')
-const _edgesOverridden = Symbol('edgesOverridden')
-// exposed symbol for unit testing the placeDep method directly
-const _peerSetSource = Symbol.for('peerSetSource')
 
 // used by Reify mixin
-const _force = Symbol.for('force')
-const _explicitRequests = Symbol('explicitRequests')
-const _global = Symbol.for('global')
-const _idealTreePrune = Symbol.for('idealTreePrune')
+const _addNodeToTrashList = Symbol.for('addNodeToTrashList')
+
+// Push items in, pop them sorted by depth and then path
+// Sorts physically shallower deps up to the front of the queue, because
+// they'll affect things deeper in, then alphabetical for consistency between
+// installs
+class DepsQueue {
+  #deps = []
+  #sorted = true
+
+  get length () {
+    return this.#deps.length
+  }
+
+  push (item) {
+    if (!this.#deps.includes(item)) {
+      this.#sorted = false
+      this.#deps.push(item)
+    }
+  }
+
+  pop () {
+    if (!this.#sorted) {
+      this.#deps.sort((a, b) => (a.depth - b.depth) || localeCompare(a.path, b.path))
+      this.#sorted = true
+    }
+    return this.#deps.shift()
+  }
+}
 
 module.exports = cls => class IdealTreeBuilder extends cls {
+  #complete
+  #currentDep = null
+  #depsQueue = new DepsQueue()
+  #depsSeen = new Set()
+  #explicitRequests = new Set()
+  #follow
+  #installStrategy
+  #linkNodes = new Set()
+  #loadFailures = new Set()
+  #manifests = new Map()
+  #mutateTree = false
+  #packageExtensions = null
+  #npmExtension = null
+  #requestedTreeMutation = false
+  // a map of each module in a peer set to the thing that depended on
+  // that set of peers in the first place.  Use a WeakMap so that we
+  // don't hold onto references for nodes that are garbage collected.
+  #peerSetSource = new WeakMap()
+  #preferDedupe = false
+  #prune
+  #strictPeerDeps
+  #virtualRoots = new Map()
+
   constructor (options) {
     super(options)
 
-    // normalize trailing slash
-    const registry = options.registry || 'https://registry.npmjs.org'
-    options.registry = this.registry = registry.replace(/\/+$/, '') + '/'
-
     const {
       follow = false,
-      force = false,
-      global = false,
-      globalStyle = false,
-      idealTree = null,
-      includeWorkspaceRoot = false,
-      installLinks = false,
-      legacyPeerDeps = false,
-      packageLock = true,
+      installStrategy = 'hoisted',
       strictPeerDeps = false,
-      workspaces = [],
+      global,
     } = options
 
-    this[_workspaces] = workspaces || []
-    this[_force] = !!force
-    this[_strictPeerDeps] = !!strictPeerDeps
+    this.#strictPeerDeps = !!strictPeerDeps
 
-    this.idealTree = idealTree
-    this.installLinks = installLinks
-    this.legacyPeerDeps = legacyPeerDeps
+    this.#installStrategy = global ? 'shallow' : installStrategy
+    this.#follow = !!follow
 
-    this[_usePackageLock] = packageLock
-    this[_global] = !!global
-    this[_globalStyle] = this[_global] || globalStyle
-    this[_follow] = !!follow
-
-    if (this[_workspaces].length && this[_global]) {
-      throw new Error('Cannot operate on workspaces in global mode')
-    }
-
-    this[_explicitRequests] = new Set()
-    this[_preferDedupe] = false
-    this[_legacyBundling] = false
-    this[_depsSeen] = new Set()
-    this[_depsQueue] = []
-    this[_currentDep] = null
-    this[_updateNames] = []
     this[_updateAll] = false
-    this[_mutateTree] = false
-    this[_loadFailures] = new Set()
-    this[_linkNodes] = new Set()
-    this[_manifests] = new Map()
-    this[_edgesOverridden] = new Set()
+    this[_updateNames] = []
     this[_resolvedAdd] = []
 
-    // a map of each module in a peer set to the thing that depended on
-    // that set of peers in the first place.  Use a WeakMap so that we
-    // don't hold onto references for nodes that are garbage collected.
-    this[_peerSetSource] = new WeakMap()
-    this[_virtualRoots] = new Map()
-
-    this[_includeWorkspaceRoot] = includeWorkspaceRoot
+    // caches for cached realpath calls
+    const cwd = process.cwd()
+    // assume that the cwd is real enough for our purposes
+    this[_rpcache] = new Map([[cwd, cwd]])
+    this[_stcache] = new Map()
+    this[_flagsSuspect] = false
   }
 
   get explicitRequests () {
-    return new Set(this[_explicitRequests])
+    return new Set(this.#explicitRequests)
   }
 
   // public method
@@ -194,9 +162,9 @@ module.exports = cls => class IdealTreeBuilder extends cls {
       options.rm = null
     }
 
-    process.emit('time', 'idealTree')
+    const timeEnd = time.start('idealTree')
 
-    if (!options.add && !options.rm && !options.update && this[_global]) {
+    if (!options.add && !options.rm && !options.update && this.options.global) {
       throw new Error('global requires add, rm, or update option')
     }
 
@@ -206,61 +174,201 @@ module.exports = cls => class IdealTreeBuilder extends cls {
     // from there, we start adding nodes to it to satisfy the deps requested
     // by the package.json in the root.
 
-    this[_parseSettings](options)
+    this.#parseSettings(options)
 
     // start tracker block
     this.addTracker('idealTree')
 
     try {
-      await this[_initTree]()
-      await this[_inflateAncientLockfile]()
-      await this[_applyUserRequests](options)
-      await this[_buildDeps]()
-      await this[_fixDepFlags]()
-      await this[_pruneFailedOptional]()
-      await this[_checkEngineAndPlatform]()
+      await this.#initTree()
+      await this.#loadNpmExtension()
+      this.#loadPackageExtensions()
+      await this.#inflateAncientLockfile()
+      await this.#applyUserRequests(options)
+      await this.#buildDeps()
+      await this.#fixDepFlags()
+      await this.#pruneFailedOptional()
+      await this.#checkEngineAndPlatform()
+      await resolvePatchedDependencies(this.idealTree, {
+        path: this.path,
+        allowUnusedPatches: this.options.allowUnusedPatches,
+        rm: options.rm || [],
+      })
+      this.#warnWorkspacePackageExtensions()
+      this.#warnWorkspaceNpmExtension()
     } finally {
-      process.emit('timeEnd', 'idealTree')
+      timeEnd()
       this.finishTracker('idealTree')
     }
 
     return treeCheck(this.idealTree)
   }
 
-  async [_checkEngineAndPlatform] () {
+  async #checkEngineAndPlatform () {
+    const { engineStrict, npmVersion, nodeVersion, omit = [], cpu, os, libc } = this.options
+    const omitSet = new Set(omit)
+
     for (const node of this.idealTree.inventory.values()) {
-      if (!node.optional) {
-        this[_checkEngine](node)
-        this[_checkPlatform](node)
+      if (!node.optional && !node.shouldOmit(omitSet)) {
+        try {
+          // if devEngines is present in the root node we ignore the engines check
+          if (!(node.isRoot && node.package.devEngines)) {
+            checkEngine(node.package, npmVersion, nodeVersion, this.options.force)
+          }
+        } catch (err) {
+          if (engineStrict) {
+            throw err
+          }
+          log.warn(err.code, err.message, {
+            package: err.pkgid,
+            required: err.required,
+            current: err.current,
+          })
+        }
+        checkPlatform(node.package, this.options.force)
+      }
+      if (node.optional && !node.inert) {
+        // Mark any optional packages we can't install as inert.
+        // We ignore the --force and --engine-strict flags.
+        try {
+          checkEngine(node.package, npmVersion, nodeVersion, false)
+          checkPlatform(node.package, false, { cpu, os, libc })
+        } catch (error) {
+          const set = optionalSet(node)
+          for (const node of set) {
+            node.inert = true
+          }
+        }
       }
     }
   }
 
-  [_checkPlatform] (node) {
-    checkPlatform(node.package, this[_force])
-  }
+  // Load the root project's packageExtensions rule set.
+  // Only the workspace root is authoritative, matching the root-only model of overrides.
+  // The canonical hash is stashed on the lockfile meta so commit() can persist it.
+  #loadPackageExtensions () {
+    const rootPkg = this.idealTree.target.package
+    const lockedHash = this.idealTree.meta.packageExtensionsHash
+    this.#packageExtensions = new PackageExtensions(rootPkg.packageExtensions)
+    this.idealTree.meta.packageExtensionsHash = this.#packageExtensions.hash
 
-  [_checkEngine] (node) {
-    const { engineStrict, npmVersion, nodeVersion } = this.options
-    const c = () =>
-      checkEngine(node.package, npmVersion, nodeVersion, this[_force])
-
-    if (engineStrict) {
-      c()
-    } else {
-      try {
-        c()
-      } catch (er) {
-        log.warn(er.code, er.message, {
-          package: er.pkgid,
-          required: er.required,
-          current: er.current,
-        })
+    // When the rule set has changed since the lockfile was written, the locked manifests for affected packages are stale.
+    // The locked manifest is the effective, already-extended manifest, so detach those nodes and rebuild them from fresh manifests under the current rules.
+    if (this.idealTree.meta.loadedFromDisk && lockedHash !== this.#packageExtensions.hash) {
+      for (const node of [...this.idealTree.inventory.values()]) {
+        if (node.isProjectRoot || node.isWorkspace || node.isTop) {
+          continue
+        }
+        // a node is affected if it carries provenance from the old rules or matches a current selector
+        const affected = node.packageExtensionsApplied ||
+          this.#packageExtensions.wouldMatch(node.packageName, node.version)
+        if (affected) {
+          for (const edge of node.edgesIn) {
+            this.#depsQueue.push(edge.from)
+          }
+          node.parent = null
+        }
       }
     }
   }
 
-  [_parseSettings] (options) {
+  // Apply a matching root packageExtension to a copy of a candidate manifest.
+  // Returns the possibly-extended manifest and the provenance to attach to the node.
+  // Workspace candidates are never extended; that warning is emitted separately.
+  #applyPackageExtension (pkg) {
+    if (!this.#packageExtensions?.present) {
+      return { pkg, applied: null }
+    }
+    const res = this.#packageExtensions.apply(pkg)
+    return res ? { pkg: res.pkg, applied: res.applied } : { pkg, applied: null }
+  }
+
+  // Load the root project's .npm-extension file and its transformManifest export.
+  // ignore-extension (and, via flatten, ignore-scripts) disables discovery and execution; the lockfile then carries no extension state.
+  // The selected file's hash is stashed on the lockfile meta so commit() can persist it and npm ci can detect stale extension state.
+  async #loadNpmExtension () {
+    const lockedHash = this.idealTree.meta.npmExtensionHash
+    // ignore-extension (and, via flatten, ignore-scripts) disables discovery and execution.
+    // Leave any locked extension state untouched so npm ci reifies the locked graph as-is and the lockfile stays internally consistent.
+    if (this.options.ignoreExtension) {
+      return
+    }
+    const ext = new NpmExtension({
+      root: this.idealTree.realpath,
+      extensionFile: this.options.extensionFile,
+    })
+    this.#npmExtension = ext
+    this.idealTree.meta.npmExtensionHash = ext.hash
+    if (ext.present) {
+      await ext.load()
+    }
+
+    // When the extension file changed since the lockfile was written, locked manifests may no longer reflect its output.
+    // This also covers removal: a now-absent file hashes to null, which differs from the locked hash and reverts the previously transformed nodes.
+    // Arbitrary code has no selector to predict which packages it affects, so re-resolve any node that carried old provenance or that the current file now transforms.
+    if (this.idealTree.meta.loadedFromDisk && lockedHash !== ext.hash) {
+      for (const node of [...this.idealTree.inventory.values()]) {
+        if (node.isProjectRoot || node.isWorkspace || node.isTop || node.isLink) {
+          continue
+        }
+        // A node with old provenance carries an already-transformed manifest, so always refetch it.
+        // Otherwise probe the locked manifest (without caching, so the authoritative full-manifest fetch is not pre-seeded).
+        // The locked manifest carries every resolution-relevant field (name, version, dependencies, peer metadata); a transform that newly targets a node by a field not persisted in the lockfile is the documented edge that may need a manual re-lock.
+        const affected = node.npmExtensionApplied || ext.apply(node.package, { memoize: false })
+        if (affected) {
+          for (const edge of node.edgesIn) {
+            this.#depsQueue.push(edge.from)
+          }
+          node.parent = null
+        }
+      }
+    }
+  }
+
+  // Apply the root transformManifest to a copy of a candidate manifest, before any packageExtensions rule.
+  // Returns the possibly-transformed manifest and the provenance to attach to the node.
+  #applyNpmExtension (pkg) {
+    const res = this.#npmExtension?.apply(pkg)
+    return res ? { pkg: res.pkg, applied: res.applied } : { pkg, applied: null }
+  }
+
+  // Warn when packageExtensions appears in a non-root workspace, or when a root selector matches a workspace member.
+  // Workspace package manifests are edited directly and are never extension targets.
+  #warnWorkspacePackageExtensions () {
+    if (!this.#packageExtensions?.present) {
+      return
+    }
+    for (const node of this.idealTree.inventory.values()) {
+      // a workspace is in the inventory as both a Link and its target node; warn once by skipping the link
+      if (!node.isWorkspace || node.isLink) {
+        continue
+      }
+      if (node.package.packageExtensions !== undefined) {
+        log.warn('packageExtensions',
+          `"packageExtensions" in workspace ${node.name} is ignored; it is only honored at the workspace root`)
+      }
+      if (this.#packageExtensions.wouldMatch(node.name, node.version)) {
+        log.warn('packageExtensions',
+          `selector matches workspace package ${node.name}@${node.version}; edit its package.json directly instead of using packageExtensions`)
+      }
+    }
+  }
+
+  // Warn when a non-root workspace package contains a .npm-extension file; only the workspace root's file is honored.
+  #warnWorkspaceNpmExtension () {
+    for (const node of this.idealTree.inventory.values()) {
+      // a workspace is in the inventory as both a Link and its target node; warn once by skipping the link
+      if (!node.isWorkspace || node.isLink || node.isProjectRoot) {
+        continue
+      }
+      if (hasExtensionFile(node.realpath)) {
+        log.warn('npm-extension',
+          `".npm-extension" in workspace ${node.name} is ignored; it is only honored at the workspace root`)
+      }
+    }
+  }
+
+  #parseSettings (options) {
     const update = options.update === true ? { all: true }
       : Array.isArray(options.update) ? { names: options.update }
       : options.update || {}
@@ -269,69 +377,92 @@ module.exports = cls => class IdealTreeBuilder extends cls {
       update.names = []
     }
 
-    this[_complete] = !!options.complete
-    this[_preferDedupe] = !!options.preferDedupe
-    this[_legacyBundling] = !!options.legacyBundling
+    this.#complete = !!options.complete
+    this.#preferDedupe = !!options.preferDedupe
 
     // validates list of update names, they must
     // be dep names only, no semver ranges are supported
     for (const name of update.names) {
       const spec = npa(name)
       const validationError =
-        new TypeError(`Update arguments must not contain package version specifiers
-
-Try using the package name instead, e.g:
+        new TypeError(`Update arguments must only contain package names, eg:
     npm update ${spec.name}`)
       validationError.code = 'EUPDATEARGS'
 
-      if (spec.fetchSpec !== 'latest') {
+      // If they gave us anything other than a bare package name
+      if (spec.raw !== spec.name) {
         throw validationError
       }
     }
     this[_updateNames] = update.names
 
     this[_updateAll] = update.all
+
+    // validates list of rm names, they must
+    // be dep names only, no semver ranges are supported
+    for (const name of options.rm || []) {
+      const spec = npa(name)
+      const validationError =
+        new TypeError(`Remove arguments must only contain package names, eg:
+    npm rm ${spec.name || '<pkg>'}`)
+      validationError.code = 'ERMARGS'
+
+      // If they gave us anything other than a bare package name
+      if (spec.raw !== spec.name) {
+        throw validationError
+      }
+    }
+
     // we prune by default unless explicitly set to boolean false
-    this[_prune] = options.prune !== false
+    this.#prune = options.prune !== false
 
     // set if we add anything, but also set here if we know we'll make
     // changes and thus have to maybe prune later.
-    this[_mutateTree] = !!(
+    this.#requestedTreeMutation = !!(
       options.add ||
       options.rm ||
       update.all ||
       update.names.length
     )
+    this.#mutateTree = this.#requestedTreeMutation
   }
 
   // load the initial tree, either the virtualTree from a shrinkwrap,
   // or just the root node from a package.json
-  [_initTree] () {
-    process.emit('time', 'idealTree:init')
-    return (
-      this[_global] ? this[_globalRootNode]()
-      : rpj(this.path + '/package.json').then(
-        pkg => this[_rootNodeFromPackage](pkg),
-        er => {
-          if (er.code === 'EJSONPARSE') {
-            throw er
-          }
-          return this[_rootNodeFromPackage]({})
+  async #initTree () {
+    const timeEnd = time.start('idealTree:init')
+    let root
+    if (this.options.global) {
+      root = await this.#globalRootNode()
+    } else {
+      try {
+        const { content: pkg } = await PackageJson.normalize(this.path)
+        root = await this.#rootNodeFromPackage(pkg)
+      } catch (err) {
+        if (err.code === 'EJSONPARSE') {
+          throw err
         }
-      ))
-      .then(root => this[_loadWorkspaces](root))
+        root = await this.#rootNodeFromPackage({})
+      }
+    }
+    return this[_setWorkspaces](root)
       // ok to not have a virtual tree.  probably initial install.
       // When updating all, we load the shrinkwrap, but don't bother
       // to build out the full virtual tree from it, since we'll be
       // reconstructing it anyway.
-      .then(root => this[_global] ? root
-      : !this[_usePackageLock] || this[_updateAll]
-        ? Shrinkwrap.reset({
-          path: this.path,
-          lockfileVersion: this.options.lockfileVersion,
-          resolveOptions: this.options,
-        }).then(meta => Object.assign(root, { meta }))
-        : this.loadVirtual({ root }))
+      .then(root => {
+        if (this.options.global) {
+          return root
+        } else if (!this.options.usePackageLock || this[_updateAll]) {
+          return Shrinkwrap.reset({
+            path: this.path,
+            lockfileVersion: this.options.lockfileVersion,
+            resolveOptions: this.options,
+          }).then(meta => Object.assign(root, { meta }))
+        } else {
+          return this.loadVirtual({ root })
+        }
+      })
 
       // if we don't have a lockfile to go from, then start with the
       // actual tree, so we only make the minimum required changes.
@@ -340,7 +471,7 @@ Try using the package name instead, e.g:
       // Load on a new Arborist object, so the Nodes aren't the same,
       // or else it'll get super confusing when we change them!
       .then(async root => {
-        if ((!this[_updateAll] && !this[_global] && !root.meta.loadedFromDisk) || (this[_global] && this[_updateNames].length)) {
+        if ((!this[_updateAll] && !this.options.global && !root.meta.loadedFromDisk) || (this.options.global && this[_updateNames].length)) {
           await new this.constructor(this.options).loadActual({ root })
           const tree = root.target
           // even though we didn't load it from a package-lock.json FILE,
@@ -349,8 +480,7 @@ Try using the package name instead, e.g:
           if (tree.children.size) {
             root.meta.loadedFromDisk = true
             // set these so that we don't try to ancient lockfile reload it
-            root.meta.originalLockfileVersion = defaultLockfileVersion
-            root.meta.lockfileVersion = defaultLockfileVersion
+            root.meta.originalLockfileVersion = root.meta.lockfileVersion = this.options.lockfileVersion || defaultLockfileVersion
           }
         }
         root.meta.inferFormattingOptions(root.package)
@@ -358,16 +488,25 @@ Try using the package name instead, e.g:
       })
 
       .then(tree => {
-        // search the virtual tree for invalid edges, if any are found add their source to
+        // search the virtual tree for missing/invalid edges, if any are found add their source to
         // the depsQueue so that we'll fix it later
         depth({
           tree,
-          getChildren: (node) => [...node.edgesOut.values()].map(edge => edge.to),
+          getChildren: (node) => {
+            const children = []
+            for (const edge of node.edgesOut.values()) {
+              children.push(edge.to)
+            }
+            return children
+          },
           filter: node => node,
           visit: node => {
             for (const edge of node.edgesOut.values()) {
-              if (!edge.valid) {
-                this[_depsQueue].push(node)
+              const skipPeerOptional = edge.type === 'peerOptional' &&
+                this.options.save === false &&
+                !this.#requestedTreeMutation
+              if (!skipPeerOptional && (!edge.to || !edge.valid)) {
+                this.#depsQueue.push(node)
                 break // no need to continue the loop after the first hit
               }
             }
@@ -377,12 +516,13 @@ Try using the package name instead, e.g:
         // if you want another one, load another copy.
         this.idealTree = tree
         this.virtualTree = null
-        process.emit('timeEnd', 'idealTree:init')
+        timeEnd()
+        return tree
       })
   }
 
-  async [_globalRootNode] () {
-    const root = await this[_rootNodeFromPackage]({ dependencies: {} })
+  async #globalRootNode () {
+    const root = await this.#rootNodeFromPackage({ dependencies: {} })
     // this is a gross kludge to handle the fact that we don't save
     // metadata on the root node in global installs, because the "root"
     // node is something like /usr/local/lib.
@@ -396,7 +536,7 @@ Try using the package name instead, e.g:
     return root
   }
 
-  async [_rootNodeFromPackage] (pkg) {
+  async #rootNodeFromPackage (pkg) {
     // if the path doesn't exist, then we explode at this point. Note that
     // this is not a problem for reify(), since it creates the root path
     // before ever loading trees.
@@ -413,7 +553,7 @@ Try using the package name instead, e.g:
       devOptional: false,
       peer: false,
       optional: false,
-      global: this[_global],
+      global: this.options.global,
       installLinks: this.installLinks,
       legacyPeerDeps: this.legacyPeerDeps,
       loadOverrides: true,
@@ -428,9 +568,10 @@ Try using the package name instead, e.g:
         devOptional: false,
         peer: false,
         optional: false,
-        global: this[_global],
+        global: this.options.global,
         installLinks: this.installLinks,
         legacyPeerDeps: this.legacyPeerDeps,
+        loadOverrides: true,
         root,
       })
     }
@@ -439,41 +580,47 @@ Try using the package name instead, e.g:
 
   // process the add/rm requests by modifying the root node, and the
   // update.names request by queueing nodes dependent on those named.
-  async [_applyUserRequests] (options) {
-    process.emit('time', 'idealTree:userRequests')
+  async #applyUserRequests (options) {
+    const timeEnd = time.start('idealTree:userRequests')
     const tree = this.idealTree.target
 
-    if (!this[_workspaces].length) {
-      await this[_applyUserRequestsToNode](tree, options)
+    if (!this.options.workspaces.length) {
+      await this.#applyUserRequestsToNode(tree, options)
     } else {
-      const nodes = this.workspaceNodes(tree, this[_workspaces])
-      if (this[_includeWorkspaceRoot]) {
+      const nodes = this.workspaceNodes(tree, this.options.workspaces)
+      if (this.options.includeWorkspaceRoot) {
         nodes.push(tree)
       }
       const appliedRequests = nodes.map(
-        node => this[_applyUserRequestsToNode](node, options)
+        node => this.#applyUserRequestsToNode(node, options)
       )
       await Promise.all(appliedRequests)
     }
 
-    process.emit('timeEnd', 'idealTree:userRequests')
+    timeEnd()
   }
 
-  async [_applyUserRequestsToNode] (tree, options) {
+  async #applyUserRequestsToNode (tree, options) {
     // If we have a list of package names to update, and we know it's
     // going to update them wherever they are, add any paths into those
     // named nodes to the buildIdealTree queue.
-    if (!this[_global] && this[_updateNames].length) {
-      this[_queueNamedUpdates]()
+    if (!this.options.global && this[_updateNames].length) {
+      this.#queueNamedUpdates()
     }
 
     // global updates only update the globalTop nodes, but we need to know
     // that they're there, and not reinstall the world unnecessarily.
     const globalExplicitUpdateNames = []
-    if (this[_global] && (this[_updateAll] || this[_updateNames].length)) {
+    if (this.options.global && (this[_updateAll] || this[_updateNames].length)) {
       const nm = resolve(this.path, 'node_modules')
-      for (const name of await readdir(nm).catch(() => [])) {
-        tree.package.dependencies = tree.package.dependencies || {}
+      const paths = await readdirScoped(nm).catch(() => [])
+      for (const p of paths) {
+        const name = p.replace(/\\/g, '/')
+        // Match loadActual behavior: hidden entries and retired scoped package
+        // folders are not installed global packages.
+        if (/^(@[^/]+\/)?\./.test(name)) {
+          continue
+        }
         const updateName = this[_updateNames].includes(name)
         if (this[_updateAll] || updateName) {
           if (updateName) {
@@ -481,10 +628,10 @@ Try using the package name instead, e.g:
           }
           const dir = resolve(nm, name)
           const st = await lstat(dir)
-            .catch(/* istanbul ignore next */ er => null)
+            .catch(/* istanbul ignore next */ () => null)
           if (st && st.isSymbolicLink()) {
             const target = await readlink(dir)
-            const real = resolve(dirname(dir), target).replace(/#/g, '%23')
+            const real = resolve(dirname(dir), target)
             tree.package.dependencies[name] = `file:${real}`
           } else {
             tree.package.dependencies[name] = '*'
@@ -494,7 +641,7 @@ Try using the package name instead, e.g:
     }
 
     if (this.auditReport && this.auditReport.size > 0) {
-      await this[_queueVulnDependents](options)
+      await this.#queueVulnDependents(options)
     }
 
     const { add, rm } = options
@@ -502,119 +649,107 @@ Try using the package name instead, e.g:
     if (rm && rm.length) {
       addRmPkgDeps.rm(tree.package, rm)
       for (const name of rm) {
-        this[_explicitRequests].add({ from: tree, name, action: 'DELETE' })
+        this.#explicitRequests.add({ from: tree, name, action: 'DELETE' })
       }
     }
 
     if (add && add.length) {
-      await this[_add](tree, options)
+      await this.#add(tree, options)
     }
 
     // triggers a refresh of all edgesOut.  this has to be done BEFORE
     // adding the edges to explicitRequests, because the package setter
     // resets all edgesOut.
-    if (add && add.length || rm && rm.length || this[_global]) {
+    if (add && add.length || rm && rm.length || this.options.global) {
       tree.package = tree.package
     }
 
     for (const spec of this[_resolvedAdd]) {
       if (spec.tree === tree) {
-        this[_explicitRequests].add(tree.edgesOut.get(spec.name))
+        this.#explicitRequests.add(tree.edgesOut.get(spec.name))
       }
     }
     for (const name of globalExplicitUpdateNames) {
-      this[_explicitRequests].add(tree.edgesOut.get(name))
+      this.#explicitRequests.add(tree.edgesOut.get(name))
     }
 
-    this[_depsQueue].push(tree)
+    this.#depsQueue.push(tree)
   }
 
-  // This returns a promise because we might not have the name yet,
-  // and need to call pacote.manifest to find the name.
-  [_add] (tree, { add, saveType = null, saveBundle = false }) {
-    // get the name for each of the specs in the list.
-    // ie, doing `foo@bar` we just return foo
-    // but if it's a url or git, we don't know the name until we
-    // fetch it and look in its manifest.
-    return Promise.all(add.map(async rawSpec => {
-      // We do NOT provide the path to npa here, because user-additions
-      // need to be resolved relative to the CWD the user is in.
-      const spec = await this[_retrieveSpecName](npa(rawSpec))
-        .then(spec => this[_updateFilePath](spec))
-        .then(spec => this[_followSymlinkPath](spec))
-      spec.tree = tree
-      return spec
-    })).then(add => {
-      this[_resolvedAdd].push(...add)
-      // now add is a list of spec objects with names.
-      // find a home for each of them!
-      addRmPkgDeps.add({
-        pkg: tree.package,
-        add,
-        saveBundle,
-        saveType,
-        path: this.path,
-      })
-    })
-  }
+  // This returns a promise because we might not have the name yet, and need to call pacote.manifest to find the name.
+  async #add (tree, { add, saveType = null, saveBundle = false }) {
+    // If we have a link it will need to be added relative to the target's path
+    const path = tree.target.path
 
-  async [_retrieveSpecName] (spec) {
-    // if it's just @'' then we reload whatever's there, or get latest
-    // if it's an explicit tag, we need to install that specific tag version
-    const isTag = spec.rawSpec && spec.type === 'tag'
+    // Get the name for each of the specs in the list.
+    // e.g. doing `foo@bar` we just return foo but if it's a url or git, we don't know the name until we fetch it and look in its manifest.
+    await Promise.all(add.map(async rawSpec => {
+      // We do NOT provide the path to npa here, because user-additions need to be resolved relative to the tree being added to.
+      let spec = npa(rawSpec)
 
-    if (spec.name && !isTag) {
-      return spec
-    }
+      // if it's just @'' then we reload whatever's there, or get latest.
+      // if it's an explicit tag, we need to install that specific tag version.
+      const isTag = spec.rawSpec && spec.type === 'tag'
 
-    const mani = await pacote.manifest(spec, { ...this.options })
-    // if it's a tag type, then we need to run it down to an actual version
-    if (isTag) {
-      return npa(`${mani.name}@${mani.version}`)
-    }
+      // look up the names of file/directory/git specs
+      if (!spec.name || isTag) {
+        const _isRoot = tree.isProjectRoot || tree.isWorkspace
+        const mani = await pacote.manifest(spec, {
+          ...this.options,
+          _isRoot,
+          before: this.#releaseAgeBefore(spec),
+        })
+        if (isTag) {
+          // translate tag to a version
+          spec = npa(`${mani.name}@${mani.version}`)
+        }
+        spec.name = mani.name
+      }
 
-    spec.name = mani.name
-    return spec
-  }
-
-  async [_updateFilePath] (spec) {
-    if (spec.type === 'file') {
-      return this[_getRelpathSpec](spec, spec.fetchSpec)
-    }
-
-    return spec
-  }
-
-  async [_followSymlinkPath] (spec) {
-    if (spec.type === 'directory') {
-      const real = await (
-        realpath(spec.fetchSpec, this[_rpcache], this[_stcache])
-          // TODO: create synthetic test case to simulate realpath failure
-          .catch(/* istanbul ignore next */() => null)
-      )
-
-      return this[_getRelpathSpec](spec, real)
-    }
-    return spec
-  }
-
-  [_getRelpathSpec] (spec, filepath) {
-    /* istanbul ignore else - should also be covered by realpath failure */
-    if (filepath) {
       const { name } = spec
-      const tree = this.idealTree.target
-      spec = npa(`file:${relpath(tree.path, filepath).replace(/#/g, '%23')}`, tree.path)
-      spec.name = name
-    }
-    return spec
+      if (spec.type === 'file') {
+        spec = npa(`file:${relpath(path, spec.fetchSpec)}`, path)
+        spec.name = name
+      } else if (spec.type === 'directory') {
+        try {
+          const real = await realpath(spec.fetchSpec, this[_rpcache], this[_stcache])
+          spec = npa(`file:${relpath(path, real)}`, path)
+          spec.name = name
+        } catch {
+          // TODO: create synthetic test case to simulate realpath failure
+        }
+      }
+      spec.tree = tree
+      this[_resolvedAdd].push(spec)
+    }))
+
+    // now this._resolvedAdd is a list of spec objects with names.
+    // find a home for each of them!
+    addRmPkgDeps.add({
+      pkg: tree.package,
+      add: this[_resolvedAdd],
+      saveBundle,
+      saveType,
+    })
   }
 
   // TODO: provide a way to fix bundled deps by exposing metadata about
   // what's in the bundle at each published manifest.  Without that, we
   // can't possibly fix bundled deps without breaking a ton of other stuff,
   // and leaving the user subject to getting it overwritten later anyway.
-  async [_queueVulnDependents] (options) {
+  async #queueVulnDependents (options) {
     for (const vuln of this.auditReport.values()) {
+      // A fix is available in-range but a release-age window blocks the patched
+      // version, so audit fix leaves this package at a vulnerable version.
+      if (vuln.fixBlockedByReleaseAge) {
+        const { version, before } = vuln.fixBlockedByReleaseAge
+        const cutoff = new Date(before).toISOString().slice(0, 10)
+        log.warn('audit', `A fix for ${vuln.name} is available (${vuln.name}@${version}) ` +
+          `but was published after the configured release-age cutoff (${cutoff}), so ` +
+          `${vuln.name} was left at a vulnerable version.\n` +
+          `To install it, add "${vuln.name}" to min-release-age-exclude, or relax ` +
+          'min-release-age or before.')
+      }
       for (const node of vuln.nodes) {
         const bundler = node.getBundler()
 
@@ -633,7 +768,7 @@ Try using the package name instead, e.g:
 
         for (const edge of node.edgesIn) {
           this.addTracker('idealTree', edge.from.name, edge.from.location)
-          this[_depsQueue].push(edge.from)
+          this.#depsQueue.push(edge.from)
         }
       }
     }
@@ -644,7 +779,7 @@ Try using the package name instead, e.g:
     //
     // XXX: how to handle top nodes that aren't the root?  Maybe the report
     // just tells the user to cd into that directory and fix it?
-    if (this[_force] && this.auditReport && this.auditReport.topVulns.size) {
+    if (this.options.force && this.auditReport && this.auditReport.topVulns.size) {
       options.add = options.add || []
       options.rm = options.rm || []
       const nodesTouched = new Set()
@@ -669,14 +804,16 @@ Try using the package name instead, e.g:
             continue
           }
 
-          const { isSemVerMajor, version } = fixAvailable
+          // name may be different if parent fixes the dep
+          // see Vuln fixAvailable setter
+          const { isSemVerMajor, version, name: fixName } = fixAvailable
           const breakingMessage = isSemVerMajor
             ? 'a SemVer major change'
             : 'outside your stated dependency range'
-          log.warn('audit', `Updating ${name} to ${version}, ` +
+          log.warn('audit', `Updating ${fixName} to ${version}, ` +
             `which is ${breakingMessage}.`)
 
-          await this[_add](node, { add: [`${name}@${version}`] })
+          await this.#add(node, { add: [`${fixName}@${version}`] })
           nodesTouched.add(node)
         }
       }
@@ -686,11 +823,7 @@ Try using the package name instead, e.g:
     }
   }
 
-  [_isVulnerable] (node) {
-    return this.auditReport && this.auditReport.isVulnerable(node)
-  }
-
-  [_avoidRange] (name) {
+  #avoidRange (name) {
     if (!this.auditReport) {
       return null
     }
@@ -701,7 +834,46 @@ Try using the package name instead, e.g:
     return vuln.range
   }
 
-  [_queueNamedUpdates] () {
+  // Enforces the allow-git / allow-file / allow-directory / allow-remote configs at the arborist resolution layer, before any branching into the symlink (Link) path or the manifest-fetch path.
+  // Pacote also enforces these inside FetcherBase.get() as defense-in-depth, but the symlink branch never reaches pacote, and the manifest cache here would bypass pacote on a cached hit.
+  // Throws the same { code: EALLOW${TYPE} } shape pacote uses, so callers and downstream consumers stay consistent.
+  #checkAllow (spec, edge) {
+    const optName = ALLOW_OPTION_FOR_TYPE[spec.type]
+    if (!optName) {
+      return
+    }
+    const allow = this.options[optName] ?? 'all'
+    if (allow === 'all') {
+      return
+    }
+    const isRoot = !!(edge?.from?.isProjectRoot || edge?.from?.isWorkspace)
+    if (allow !== 'none' && isRoot) {
+      return
+    }
+    throw Object.assign(
+      new Error(`Fetching${allow === 'root' ? ' non-root' : ''} packages of type "${spec.type}" have been disabled`),
+      {
+        code: `EALLOW${spec.type.toUpperCase()}`,
+        package: spec.toString(),
+      }
+    )
+  }
+
+  // Builds a Node representing a spec we failed to load (allow-* gate, network failure, ENOTARGET, etc.) and records it in #loadFailures so #pruneFailedOptional can later decide whether the failure is fatal or silently dropped for optional deps.
+  #failureNode (name, parent, error, edge) {
+    error.requiredBy = edge?.from?.location || '.'
+    const n = new Node({
+      name,
+      parent,
+      error,
+      installLinks: this.installLinks,
+      legacyPeerDeps: this.legacyPeerDeps,
+    })
+    this.#loadFailures.add(n)
+    return n
+  }
+
+  #queueNamedUpdates () {
     // ignore top nodes, since they are not loaded the same way, and
     // probably have their own project associated with them.
 
@@ -712,25 +884,19 @@ Try using the package name instead, e.g:
 
     // XXX this could be faster by doing a series of inventory.query('name')
     // calls rather than walking over everything in the tree.
-    const set = this.idealTree.inventory
-      .filter(n => this[_shouldUpdateNode](n))
-    // XXX add any invalid edgesOut to the queue
-    for (const node of set) {
-      for (const edge of node.edgesIn) {
-        this.addTracker('idealTree', edge.from.name, edge.from.location)
-        this[_depsQueue].push(edge.from)
+    for (const node of this.idealTree.inventory.values()) {
+      // XXX add any invalid edgesOut to the queue
+      if (this[_updateNames].includes(node.name) &&
+        !node.isTop && !node.inDepBundle) {
+        for (const edge of node.edgesIn) {
+          this.addTracker('idealTree', edge.from.name, edge.from.location)
+          this.#depsQueue.push(edge.from)
+        }
       }
     }
   }
 
-  [_shouldUpdateNode] (node) {
-    return this[_updateNames].includes(node.name) &&
-      !node.isTop &&
-      !node.inDepBundle &&
-      !node.inShrinkwrap
-  }
-
-  async [_inflateAncientLockfile] () {
+  async #inflateAncientLockfile () {
     const { meta, inventory } = this.idealTree
     const ancient = meta.ancientLockfile
     const old = meta.loadedFromDisk && !(meta.originalLockfileVersion >= 2)
@@ -742,7 +908,7 @@ Try using the package name instead, e.g:
     // if the lockfile is from node v5 or earlier, then we'll have to reload
     // all the manifests of everything we encounter.  this is costly, but at
     // least it's just a one-time hit.
-    process.emit('time', 'idealTree:inflate')
+    const timeEnd = time.start('idealTree:inflate')
 
     // don't warn if we're not gonna actually write it back anyway.
     const heading = ancient ? 'ancient lockfile' : 'old lockfile'
@@ -781,17 +947,19 @@ This is a one-time fix-up, please be patient...
         const spec = npa.resolve(name, id, dirname(path))
         const t = `idealTree:inflate:${location}`
         this.addTracker(t)
-        await pacote.manifest(spec, {
-          ...this.options,
-          resolved: resolved,
-          integrity: integrity,
-          fullMetadata: false,
-        }).then(mani => {
+        try {
+          const mani = await pacote.manifest(spec, {
+            ...this.options,
+            resolved: resolved,
+            integrity: integrity,
+            fullMetadata: false,
+            before: this.#releaseAgeBefore(spec),
+          })
           node.package = { ...mani, _id: `${mani.name}@${mani.version}` }
-        }).catch((er) => {
+        } catch (er) {
           const warning = `Could not fetch metadata for ${name}@${id}`
           log.warn(heading, warning, er)
-        })
+        }
         this.finishTracker(t)
       })
     }
@@ -799,99 +967,87 @@ This is a one-time fix-up, please be patient...
 
     // have to re-calc dep flags, because the nodes don't have edges
     // until their packages get assigned, so everything looks extraneous
+    resetDepFlags(this.idealTree)
     calcDepFlags(this.idealTree)
 
     // yes, yes, this isn't the "original" version, but now that it's been
     // upgraded, we need to make sure we don't do the work to upgrade it
     // again, since it's now as new as can be.
-    meta.originalLockfileVersion = defaultLockfileVersion
+    if (!this.options.lockfileVersion && !meta.hiddenLockfile) {
+      meta.originalLockfileVersion = defaultLockfileVersion
+    }
     this.finishTracker('idealTree:inflate')
-    process.emit('timeEnd', 'idealTree:inflate')
+    timeEnd()
   }
 
   // at this point we have a virtual tree with the actual root node's
   // package deps, which may be partly or entirely incomplete, invalid
   // or extraneous.
-  [_buildDeps] () {
-    process.emit('time', 'idealTree:buildDeps')
+  #buildDeps () {
+    const timeEnd = time.start('idealTree:buildDeps')
     const tree = this.idealTree.target
     tree.assertRootOverrides()
-    this[_depsQueue].push(tree)
+    this.#depsQueue.push(tree)
     // XXX also push anything that depends on a node with a name
     // in the override list
     log.silly('idealTree', 'buildDeps')
     this.addTracker('idealTree', tree.name, '')
-    return this[_buildDepStep]()
-      .then(() => process.emit('timeEnd', 'idealTree:buildDeps'))
+    return this.#buildDepStep().then(timeEnd)
   }
 
-  async [_buildDepStep] () {
+  async #buildDepStep () {
     // removes tracker of previous dependency in the queue
-    if (this[_currentDep]) {
-      const { location, name } = this[_currentDep]
-      process.emit('timeEnd', `idealTree:${location || '#root'}`)
+    if (this.#currentDep) {
+      const { location, name } = this.#currentDep
+      time.end(`idealTree:${location || '#root'}`)
       this.finishTracker('idealTree', name, location)
-      this[_currentDep] = null
+      this.#currentDep = null
     }
 
-    if (!this[_depsQueue].length) {
-      return this[_resolveLinks]()
+    if (!this.#depsQueue.length) {
+      return this.#resolveLinks()
     }
 
-    // sort physically shallower deps up to the front of the queue,
-    // because they'll affect things deeper in, then alphabetical
-    this[_depsQueue].sort((a, b) =>
-      (a.depth - b.depth) || localeCompare(a.path, b.path))
-
-    const node = this[_depsQueue].shift()
+    const node = this.#depsQueue.pop()
     const bd = node.package.bundleDependencies
     const hasBundle = bd && Array.isArray(bd) && bd.length
-    const { hasShrinkwrap } = node
 
     // if the node was already visited, or has since been removed from the
-    // tree, skip over it and process the rest of the queue.  If a node has
-    // a shrinkwrap, also skip it, because it's going to get its deps
-    // satisfied by whatever's in that file anyway.
-    if (this[_depsSeen].has(node) ||
-        node.root !== this.idealTree ||
-        hasShrinkwrap && !this[_complete]) {
-      return this[_buildDepStep]()
+    // tree, skip over it and process the rest of the queue.
+    if (this.#depsSeen.has(node) ||
+        node.root !== this.idealTree) {
+      return this.#buildDepStep()
     }
 
-    this[_depsSeen].add(node)
-    this[_currentDep] = node
-    process.emit('time', `idealTree:${node.location || '#root'}`)
+    this.#depsSeen.add(node)
+    this.#currentDep = node
+    time.start(`idealTree:${node.location || '#root'}`)
 
     // if we're loading a _complete_ ideal tree, for a --package-lock-only
     // installation for example, we have to crack open the tarball and
-    // look inside if it has bundle deps or shrinkwraps.  note that this is
+    // look inside if it has bundle deps.  note that this is
     // not necessary during a reification, because we just update the
-    // ideal tree by reading bundles/shrinkwraps in place.
+    // ideal tree by reading bundles in place.
     // Don't bother if the node is from the actual tree and hasn't
     // been resolved, because we can't fetch it anyway, could be anything!
-    const crackOpen = this[_complete] &&
+    const crackOpen = this.#complete &&
       node !== this.idealTree &&
       node.resolved &&
-      (hasBundle || hasShrinkwrap)
+      hasBundle &&
+      !node.inert
     if (crackOpen) {
       const Arborist = this.constructor
       const opt = { ...this.options }
       await cacache.tmp.withTmp(this.cache, opt, async path => {
         await pacote.extract(node.resolved, path, {
           ...opt,
+          Arborist,
           resolved: node.resolved,
           integrity: node.integrity,
         })
 
-        if (hasShrinkwrap) {
-          await new Arborist({ ...this.options, path })
-            .loadVirtual({ root: node })
-        }
-
-        if (hasBundle) {
-          await new Arborist({ ...this.options, path })
-            .loadActual({ root: node, ignoreMissing: true })
-        }
+        await new Arborist({ ...this.options, path })
+          .loadActual({ root: node, ignoreMissing: true })
       })
     }
 
@@ -937,8 +1093,8 @@ This is a one-time fix-up, please be patient...
     // dep if allowed.
 
     const tasks = []
-    const peerSource = this[_peerSetSource].get(node) || node
-    for (const edge of this[_problemEdges](node)) {
+    const peerSource = this.#peerSetSource.get(node) || node
+    for (const edge of this.#problemEdges(node)) {
       if (edge.peerConflicted) {
         continue
       }
@@ -949,7 +1105,7 @@ This is a one-time fix-up, please be patient...
       // so we VR the node itself if the edge is not a peer
       const source = edge.peer ? peerSource : node
 
-      const virtualRoot = this[_virtualRoot](source, true)
+      const virtualRoot = this.#virtualRoot(source, true)
       // reuse virtual root if we already have one, but don't
       // try to do the override ahead of time, since we MAY be able
       // to create a more correct tree than the virtual root could.
@@ -972,8 +1128,21 @@ This is a one-time fix-up, please be patient...
       // be forced to agree on a version of z.
       const required = new Set([edge.from])
       const parent = edge.peer ? virtualRoot : null
-      const dep = vrDep && vrDep.satisfies(edge) ? vrDep
-        : await this[_nodeFromEdge](edge, parent, null, required)
+      let dep = vrDep && vrDep.satisfies(edge) ? vrDep : null
+
+      // A peerOptional conflict can be resolved by finding an existing node in the tree that satisfies the edge, avoiding a registry fetch that may introduce an extraneous package. See npm/cli#9249.
+      // Skip the shortcut when the user has signaled an explicit re-fetch intent (npm update by name, explicit request, or audit fix), so we honor those signals rather than silently keeping the existing node.
+      const skipExistingShortcut = this[_updateNames].includes(edge.name)
+        || this.#explicitRequests.has(edge)
+        || (edge.to && this.auditReport?.isVulnerable(edge.to))
+      if (!dep && edge.type === 'peerOptional' && !skipExistingShortcut) {
+        dep = this.#findHoistableNode(
+          /* istanbul ignore next - resolveParent is always set for non-root nodes */
+          edge.from.resolveParent || edge.from, edge)
+      }
+      if (!dep) {
+        dep = await this.#nodeFromEdge(edge, parent, null, required)
+      }
 
       /* istanbul ignore next */
       debug(() => {
@@ -985,33 +1154,31 @@ This is a one-time fix-up, please be patient...
       tasks.push({ edge, dep })
     }
 
-    const placeDeps = tasks
-      .sort((a, b) => localeCompare(a.edge.name, b.edge.name))
-      .map(({ edge, dep }) => new PlaceDep({
+    const placeDeps = tasks.sort((a, b) => localeCompare(a.edge.name, b.edge.name))
+
+    const promises = []
+    for (const { edge, dep } of placeDeps) {
+      const pd = new PlaceDep({
         edge,
         dep,
 
-        explicitRequest: this[_explicitRequests].has(edge),
-        updateNames: this[_updateNames],
         auditReport: this.auditReport,
-        force: this[_force],
-        preferDedupe: this[_preferDedupe],
-        legacyBundling: this[_legacyBundling],
-        strictPeerDeps: this[_strictPeerDeps],
+        explicitRequest: this.#explicitRequests.has(edge),
+        force: this.options.force,
         installLinks: this.installLinks,
+        installStrategy: this.#installStrategy,
         legacyPeerDeps: this.legacyPeerDeps,
-        globalStyle: this[_globalStyle],
-      }))
-
-    const promises = []
-    for (const pd of placeDeps) {
+        preferDedupe: this.#preferDedupe,
+        strictPeerDeps: this.#strictPeerDeps,
+        updateNames: this[_updateNames],
+      })
       // placing a dep is actually a tree of placing the dep itself
       // and all of its peer group that aren't already met by the tree
       depth({
         tree: pd,
         getChildren: pd => pd.children,
         visit: pd => {
-          const { placed, edge, canPlace: cpd } = pd
+          const { placed, edge, canPlace: cpd, parent } = pd
           // if we didn't place anything, nothing to do here
           if (!placed) {
             return
@@ -1019,18 +1186,33 @@ This is a one-time fix-up, please be patient...
 
           // we placed something, that means we changed the tree
           if (placed.errors.length) {
-            this[_loadFailures].add(placed)
+            this.#loadFailures.add(placed)
           }
-          this[_mutateTree] = true
+          this.#mutateTree = true
           if (cpd.canPlaceSelf === OK) {
             for (const edgeIn of placed.edgesIn) {
               if (edgeIn === edge) {
                 continue
               }
               const { from, valid, peerConflicted } = edgeIn
-              if (!peerConflicted && !valid && !this[_depsSeen].has(from)) {
-                this.addTracker('idealTree', from.name, from.location)
-                this[_depsQueue].push(edgeIn.from)
+              if (!peerConflicted && !valid) {
+                if (this.#depsSeen.has(from) &&
+                  (this.options.save ||
+                    (this.options.save === false && this.#requestedTreeMutation))) {
+                  // Re-queue already-processed nodes when a newly placed dep
+                  // creates an invalid edge during npm install or another
+                  // lockfile-mutating operation. This handles the case where a
+                  // peerOptional dep was valid (missing) when the node was
+                  // first processed, but becomes invalid when the dep is later
+                  // placed by another path with a version that doesn't satisfy
+                  // the peer spec.
+                  // See npm/cli#8726.
+                  this.#depsSeen.delete(from)
+                  this.#depsQueue.push(from)
+                } else if (!this.#depsSeen.has(from)) {
+                  this.addTracker('idealTree', from.name, from.location)
+                  this.#depsQueue.push(from)
+                }
               }
             }
           } else {
@@ -1048,8 +1230,8 @@ This is a one-time fix-up, please be patient...
                 if (!valid && !peerConflicted) {
                   // if it's already been visited, we have to re-visit
                   // otherwise, just enqueue normally.
-                  this[_depsSeen].delete(edgeIn.from)
-                  this[_depsQueue].push(edgeIn.from)
+                  this.#depsSeen.delete(edgeIn.from)
+                  this.#depsQueue.push(edgeIn.from)
                 }
               }
             }
@@ -1064,65 +1246,79 @@ This is a one-time fix-up, please be patient...
             return
           }
 
-          // lastly, also check for the missing deps of the node we placed,
-          // and any holes created by pruning out conflicted peer sets.
-          this[_depsQueue].push(placed)
+          // lastly, also check for the missing deps of the node we placed, and any holes created by pruning out conflicted peer sets.
+          this.#depsQueue.push(placed)
           for (const dep of pd.needEvaluation) {
-            this[_depsSeen].delete(dep)
-            this[_depsQueue].push(dep)
+            this.#depsSeen.delete(dep)
+            this.#depsQueue.push(dep)
           }
 
           // pre-fetch any problem edges, since we'll need these soon
-          // if it fails at this point, though, dont' worry because it
-          // may well be an optional dep that has gone missing.  it'll
-          // fail later anyway.
-          promises.push(...this[_problemEdges](placed).map(e =>
-            this[_fetchManifest](npa.resolve(e.name, e.spec, fromPath(placed, e)))
-              .catch(er => null)))
+          // if it fails at this point, though, don't worry because it may well be an optional dep that has gone missing
+          // it'll fail later anyway
+          for (const e of this.#problemEdges(placed)) {
+            // XXX This is somehow load bearing.  This makes tests that print the ideal tree of a tree with tarball dependencies fail
+            // This can't be changed or removed till we figure out why
+            // The test is named "tarball deps with transitive tarball deps"
+            promises.push(() =>
+              this.#fetchManifest(npa.resolve(e.name, e.spec, fromPath(placed, e)), parent, e)
+                .catch(() => null)
+            )
+          }
         },
       })
     }
 
     for (const { to } of node.edgesOut.values()) {
       if (to && to.isLink && to.target) {
-        this[_linkNodes].add(to)
+        this.#linkNodes.add(to)
       }
     }
 
-    await Promise.all(promises)
-    return this[_buildDepStep]()
+    await promiseCallLimit(promises)
+    return this.#buildDepStep()
   }
 
-  // loads a node from an edge, and then loads its peer deps (and their
-  // peer deps, on down the line) into a virtual root parent.
-  async [_nodeFromEdge] (edge, parent_, secondEdge, required) {
-    // create a virtual root node with the same deps as the node that
-    // is requesting this one, so that we can get all the peer deps in
-    // a context where they're likely to be resolvable.
-    // Note that the virtual root will also have virtual copies of the
-    // targets of any child Links, so that they resolve appropriately.
-    const parent = parent_ || this[_virtualRoot](edge.from)
+  // BFS descendants of `root` for a node satisfying `edge`.
+  // Prefers nodes closer to root.  Skips bundled nodes.
+  #findHoistableNode (root, edge) {
+    const queue = [...root.children.values()]
+    while (queue.length) {
+      const node = queue.shift()
+      if (node.name === edge.name
+        && !node.inDepBundle
+        && node.satisfies(edge)) {
+        return node
+      }
+      for (const child of node.children.values()) {
+        queue.push(child)
+      }
+    }
+    return null
+  }
+
+  // loads a node from an edge, and then loads its peer deps (and their peer deps, on down the line) into a virtual root parent.
+  async #nodeFromEdge (edge, parent_, secondEdge, required) {
+    // create a virtual root node with the same deps as the node that is requesting this one, so that we can get all the peer deps in a context where they're likely to be resolvable.
+    // Note that the virtual root will also have virtual copies of the targets of any child Links, so that they resolve appropriately.
+    const parent = parent_ || this.#virtualRoot(edge.from)
 
     const spec = npa.resolve(edge.name, edge.spec, edge.from.path)
-    const first = await this[_nodeFromSpec](edge.name, spec, parent, edge)
+    const first = await this.#nodeFromSpec(edge.name, spec, parent, edge)
 
-    // we might have a case where the parent has a peer dependency on
-    // `foo@*` which resolves to v2, but another dep in the set has a
-    // peerDependency on `foo@1`.  In that case, if we force it to be v2,
-    // we're unnecessarily triggering an ERESOLVE.
-    // If we have a second edge to worry about, and it's not satisfied
-    // by the first node, try a second and see if that satisfies the
-    // original edge here.
+    // we might have a case where the parent has a peer dependency on `foo@*` which resolves to v2, but another dep in the set has a peerDependency on `foo@1`.
+    // In that case, if we force it to be v2, we're unnecessarily triggering an ERESOLVE.
+    // If we have a second edge to worry about, and it's not satisfied by the first node, try a second and see if that satisfies the original edge here.
     const spec2 = secondEdge && npa.resolve(
       edge.name,
       secondEdge.spec,
       secondEdge.from.path
     )
     const second = secondEdge && !secondEdge.valid
-      ? await this[_nodeFromSpec](edge.name, spec2, parent, secondEdge)
+      ? await this.#nodeFromSpec(edge.name, spec2, parent, secondEdge)
       : null
 
-    // pick the second one if they're both happy with that, otherwise first
+    // pick the second one if they're both happy with that; otherwise, first
     const node = second && edge.valid ? second : first
     // ensure the one we want is the one that's placed
     node.parent = parent
@@ -1135,23 +1331,23 @@ This is a one-time fix-up, please be patient...
 
     // keep track of the thing that caused this node to be included.
     const src = parent.sourceReference
-    this[_peerSetSource].set(node, src)
+    this.#peerSetSource.set(node, src)
 
     // do not load the peers along with the set if this is a global top pkg
     // otherwise we'll be tempted to put peers as other top-level installed
     // things, potentially clobbering what's there already, which is not
     // what we want.  the missing edges will be picked up on the next pass.
-    if (this[_global] && edge.from.isProjectRoot) {
+    if (this.options.global && edge.from.isProjectRoot) {
       return node
     }
 
     // otherwise, we have to make sure that our peers can go along with us.
-    return this[_loadPeerSet](node, required)
+    return this.#loadPeerSet(node, required)
   }
 
-  [_virtualRoot] (node, reuse = false) {
-    if (reuse && this[_virtualRoots].has(node)) {
-      return this[_virtualRoots].get(node)
+  #virtualRoot (node, reuse = false) {
+    if (reuse && this.#virtualRoots.has(node)) {
+      return this.#virtualRoots.get(node)
     }
 
     const vr = new Node({
@@ -1174,11 +1370,11 @@ This is a one-time fix-up, please be patient...
       }
     }
 
-    this[_virtualRoots].set(node, vr)
+    this.#virtualRoots.set(node, vr)
     return vr
   }
 
-  [_problemEdges] (node) {
+  #problemEdges (node) {
     // skip over any bundled deps, they're not our problem.
     // Note that this WILL fetch bundled meta-deps which are also dependencies
     // but not listed as bundled deps.  When reifying, we first unpack any
@@ -1193,135 +1389,199 @@ This is a one-time fix-up, please be patient...
       : node.package.bundleDependencies
     const bundled = new Set(bd || [])
 
-    return [...node.edgesOut.values()]
-      .filter(edge => {
-        // If it's included in a bundle, we take whatever is specified.
-        if (bundled.has(edge.name)) {
-          return false
-        }
+    const problems = []
+    for (const edge of node.edgesOut.values()) {
+      // If it's included in a bundle, we take whatever is specified.
+      if (bundled.has(edge.name)) {
+        continue
+      }
 
-        // If it's already been logged as a load failure, skip it.
-        if (edge.to && this[_loadFailures].has(edge.to)) {
-          return false
-        }
+      // If it's already been logged as a load failure, skip it.
+      if (edge.to && this.#loadFailures.has(edge.to)) {
+        continue
+      }
 
-        // If it's shrinkwrapped, we use what the shrinkwap wants.
-        if (edge.to && edge.to.inShrinkwrap) {
-          return false
+      // If the edge has no destination, that's a problem, unless
+      // if it's peerOptional and not explicitly requested.
+      if (!edge.to) {
+        if (edge.type !== 'peerOptional' ||
+          this.#explicitRequests.has(edge)) {
+          problems.push(edge)
         }
+        continue
+      }
 
-        // If the edge has no destination, that's a problem, unless
-        // if it's peerOptional and not explicitly requested.
-        if (!edge.to) {
-          return edge.type !== 'peerOptional' ||
-            this[_explicitRequests].has(edge)
+      // If the edge has an error, there's a problem, unless it's peerOptional
+      // and we're not saving or otherwise mutating (e.g. npm ci), in which
+      // case we trust the lockfile and skip re-resolution. When saving (npm
+      // install) or updating, peerOptional invalid edges ARE treated as
+      // problems so the lockfile gets fixed.
+      // See npm/cli#8726.
+      if (!edge.valid) {
+        if (edge.type !== 'peerOptional' ||
+          this.options.save !== false ||
+          this.#requestedTreeMutation) {
+          problems.push(edge)
         }
+        continue
+      }
 
-        // If the edge has an error, there's a problem.
-        if (!edge.valid) {
-          return true
-        }
+      // If the edge is a workspace, and it's valid, leave it alone
+      if (edge.to.isWorkspace) {
+        continue
+      }
 
-        // If the edge is a workspace, and it's valid, leave it alone
-        if (edge.to.isWorkspace) {
-          return false
-        }
+      // user explicitly asked to update this package by name, problem
+      if (this[_updateNames].includes(edge.name)) {
+        problems.push(edge)
+        continue
+      }
 
-        // user explicitly asked to update this package by name, problem
-        if (this[_updateNames].includes(edge.name)) {
-          return true
-        }
+      // fixing a security vulnerability with this package, problem
+      if (this.auditReport && this.auditReport.isVulnerable(edge.to)) {
+        problems.push(edge)
+        continue
+      }
 
-        // fixing a security vulnerability with this package, problem
-        if (this[_isVulnerable](edge.to)) {
-          return true
-        }
-
-        // user has explicitly asked to install this package, problem
-        if (this[_explicitRequests].has(edge)) {
-          return true
-        }
-
-        // No problems!
-        return false
-      })
+      // user has explicitly asked to install this package, problem
+      if (this.#explicitRequests.has(edge)) {
+        problems.push(edge)
+        continue
+      }
+    }
+    return problems
   }
 
-  async [_fetchManifest] (spec) {
+  // The effective `before` filter for a package, applying `min-release-age-exclude`.
+  // Returns null (no age filter) for an exempted package, otherwise the
+  // configured `before`. The exemption is keyed on the spec's trusted registry
+  // identity (alias targets are unwrapped) so an `npm:` alias key cannot disable
+  // the filter for the package it actually resolves to.
+  #releaseAgeBefore (spec) {
+    const { before, minReleaseAgeExclude } = this.options
+    if (!before) {
+      return before
+    }
+    return isReleaseAgeExcluded(trustedSpecName(spec), minReleaseAgeExclude) ? null : before
+  }
+
+  async #fetchManifest (spec, parent, edge) {
+    // Enforce allow-* gates before consulting the manifest cache so a cached entry from a different edge cannot bypass the policy.
+    this.#checkAllow(spec, edge)
     const options = {
       ...this.options,
-      avoid: this[_avoidRange](spec.name),
+      avoid: this.#avoidRange(spec.name),
+      fullMetadata: true,
+      before: this.#releaseAgeBefore(spec),
+      _isRoot: !!(edge?.from?.isProjectRoot || edge?.from?.isWorkspace),
     }
     // get the intended spec and stored metadata from yarn.lock file,
     // if available and valid.
     spec = this.idealTree.meta.checkYarnLock(spec, options)
 
-    if (this[_manifests].has(spec.raw)) {
-      return this[_manifests].get(spec.raw)
+    if (this.#manifests.has(spec.raw)) {
+      return this.#manifests.get(spec.raw)
     } else {
-      log.silly('fetch manifest', spec.raw)
-      const p = pacote.manifest(spec, options)
-        .then(mani => {
-          this[_manifests].set(spec.raw, mani)
-          return mani
-        })
-      this[_manifests].set(spec.raw, p)
-      return p
+      log.silly('fetch manifest', spec.raw.replace(spec.rawSpec, redact(spec.rawSpec)))
+      const mani = await pacote.manifest(spec, options)
+      this.#manifests.set(spec.raw, mani)
+      return mani
     }
   }
 
-  [_nodeFromSpec] (name, spec, parent, edge) {
-    // pacote will slap integrity on its options, so we have to clone
-    // the object so it doesn't get mutated.
-    // Don't bother to load the manifest for link deps, because the target
-    // might be within another package that doesn't exist yet.
+  async #nodeFromSpec (name, spec, parent, edge) {
+    // Enforce allow-git / allow-file / allow-directory / allow-remote before any branching, so the symlink (Link) path is enforced as well as the manifest-fetch path.
+    // Route the failure through #loadFailures so optional-dep semantics apply (e.g. a transitive optionalDependencies entry that resolves to a disallowed git URL is silently dropped rather than failing the install).
+    try {
+      this.#checkAllow(spec, edge)
+    } catch (error) {
+      return this.#failureNode(name, parent, error, edge)
+    }
+
+    // pacote will slap integrity on its options, so we have to clone the object so it doesn't get mutated.
+    // Don't bother to load the manifest for link deps, because the target might be within another package that doesn't exist yet.
     const { installLinks, legacyPeerDeps } = this
     const isWorkspace = this.idealTree.workspaces && this.idealTree.workspaces.has(spec.name)
 
-    // spec is a directory, link it unless installLinks is set or it's a workspace
-    if (spec.type === 'directory' && (isWorkspace || !installLinks)) {
-      return this[_linkFromSpec](name, spec, parent, edge)
+    // spec is a directory, link it if:
+    // - it's a workspace, OR
+    // - it's a project-internal file: dependency (always linked), OR
+    // - it's external and installLinks is false
+    // TODO post arborist refactor, will need to check for installStrategy=linked
+    let isProjectInternalFileSpec = false
+    if (edge?.rawSpec.startsWith('file:../') || edge?.rawSpec.startsWith('file:./')) {
+      const targetPath = resolve(parent.realpath, edge.rawSpec.slice(5))
+      const resolvedProjectRoot = resolve(this.idealTree.realpath)
+      // Check if the target is within the project root
+      isProjectInternalFileSpec = targetPath.startsWith(resolvedProjectRoot + sep) || targetPath === resolvedProjectRoot
     }
 
-    // if the spec matches a workspace name, then see if the workspace node will
-    // satisfy the edge. if it does, we return the workspace node to make sure it
-    // takes priority.
+    // When using --install-links, we need to handle transitive file dependencies specially
+    // If the parent was installed (not linked) due to --install-links, and this is a file: dep, we should also install it rather than link it
+    const parentWasInstalled = parent && !parent.isLink && parent.resolved?.startsWith('file:')
+    const isTransitiveFileDep = spec.type === 'directory' && parentWasInstalled && installLinks
+
+    // Decide whether to link or copy the dependency
+    const shouldLink = (isWorkspace || isProjectInternalFileSpec || !installLinks) && !isTransitiveFileDep
+    if (spec.type === 'directory' && shouldLink) {
+      const realpath = spec.fetchSpec
+      const { content: pkg } = await PackageJson.normalize(realpath).catch(() => {
+        return { content: {} }
+      })
+      const link = new Link({ name, parent, realpath, pkg, installLinks, legacyPeerDeps })
+      this.#linkNodes.add(link)
+      return link
+    }
+
+    // if the spec matches a workspace name, then see if the workspace node will satisfy the edge. if it does, we return the workspace node to make sure it takes priority.
     if (isWorkspace) {
       const existingNode = this.idealTree.edgesOut.get(spec.name).to
       if (existingNode && existingNode.isWorkspace && existingNode.satisfies(edge)) {
-        return edge.to
+        return existingNode
       }
+    }
+
+    // For file: dependencies that we're installing (not linking), ensure proper resolution
+    if (isTransitiveFileDep && edge) {
+      // For transitive file deps, resolve relative to the parent's original source location
+      const parentOriginalPath = parent.resolved.slice(5) // Remove 'file:' prefix
+      const relativePath = edge.rawSpec.slice(5) // Remove 'file:' prefix
+      const absolutePath = resolve(parentOriginalPath, relativePath)
+      spec = npa.resolve(name, `file:${absolutePath}`)
     }
 
     // spec isn't a directory, and either isn't a workspace or the workspace we have
     // doesn't satisfy the edge. try to fetch a manifest and build a node from that.
-    return this[_fetchManifest](spec)
-      .then(pkg => new Node({ name, pkg, parent, installLinks, legacyPeerDeps }), error => {
-        error.requiredBy = edge.from.location || '.'
-
-        // failed to load the spec, either because of enotarget or
-        // fetch failure of some other sort.  save it so we can verify
-        // later that it's optional, otherwise the error is fatal.
-        const n = new Node({
-          name,
-          parent,
-          error,
-          installLinks,
-          legacyPeerDeps,
-        })
-        this[_loadFailures].add(n)
-        return n
-      })
-  }
-
-  [_linkFromSpec] (name, spec, parent, edge) {
-    const realpath = spec.fetchSpec
-    const { installLinks, legacyPeerDeps } = this
-    return rpj(realpath + '/package.json').catch(() => ({})).then(pkg => {
-      const link = new Link({ name, parent, realpath, pkg, installLinks, legacyPeerDeps })
-      this[_linkNodes].add(link)
-      return link
-    })
+    return this.#fetchManifest(spec, parent, edge)
+      .then(
+        pkg => {
+          // When a proxy/upstream registry returns an incomplete manifest
+          // (e.g. missing version field for platform-specific packages it
+          // hasn't cached), treat it as a load failure so that optional deps
+          // are properly pruned instead of written to the lockfile without
+          // version metadata.  Only apply to registry specs — file: deps
+          // legitimately omit version.
+          if (!pkg.version && spec.registry) {
+            const error = Object.assign(
+              new Error(`incomplete manifest for ${name}, missing version`),
+              { code: 'EINCOMPLETEMANIFEST' }
+            )
+            return this.#failureNode(name, parent, error, edge)
+          }
+          // Transform the manifest copy before any packageExtensions rule and before the Node reads its dependency and peer edges.
+          const transformed = this.#applyNpmExtension(pkg)
+          const { pkg: extended, applied } = this.#applyPackageExtension(transformed.pkg)
+          const node = new Node({ name, pkg: extended, parent, installLinks, legacyPeerDeps })
+          if (transformed.applied) {
+            node.npmExtensionApplied = transformed.applied
+          }
+          if (applied) {
+            node.packageExtensionsApplied = applied
+          }
+          return node
+        },
+        error => this.#failureNode(name, parent, error, edge)
+      )
   }
 
   // load all peer deps and meta-peer deps into the node's parent
@@ -1337,7 +1597,7 @@ This is a one-time fix-up, please be patient...
   // gets placed first.  In non-strict mode, we behave strictly if the
   // virtual root is based on the root project, and allow non-peer parent
   // deps to override, but throw if no preference can be determined.
-  async [_loadPeerSet] (node, required) {
+  async #loadPeerSet (node, required) {
     const peerEdges = [...node.edgesOut.values()]
       // we typically only install non-optional peers, but we have to
       // factor them into the peerSet so that we can avoid conflicts
@@ -1345,6 +1605,12 @@ This is a one-time fix-up, please be patient...
       .sort(({ name: a }, { name: b }) => localeCompare(a, b))
 
     for (const edge of peerEdges) {
+      // node.parent gets mutated during loop execution due to recursive #nodeFromEdge calls.
+      // When a compatible peer is found (e.g. a@1.1.0 replaces a@1.2.0), the original node loses its parent.
+      // if node is detached/removed from the tree, or has no parent, so no need to check remaining edgesOut for that node.
+      if (!node.parent) {
+        break
+      }
       // already placed this one, and we're happy with it.
       if (edge.valid && edge.to) {
         continue
@@ -1353,12 +1619,22 @@ This is a one-time fix-up, please be patient...
       const parentEdge = node.parent.edgesOut.get(edge.name)
       const { isProjectRoot, isWorkspace } = node.parent.sourceReference
       const isMine = isProjectRoot || isWorkspace
-      const conflictOK = this[_force] || !isMine && !this[_strictPeerDeps]
+      const conflictOK = this.options.force || !isMine && !this.#strictPeerDeps
 
       if (!edge.to) {
         if (!parentEdge) {
+          // the peer is missing from the virtual root; check the real tree before skipping.
+          // we can avoid a fetch for an optional peer, or a compatible provider, though
+          // an incompatible provider still has to be resolved here so that the
+          // optional peer set nests instead of displacing required peers.
+          if (edge.type === 'peerOptional') {
+            const current = node.parent.sourceReference.resolve(edge.name)
+            if (!current || current.satisfies(edge)) {
+              continue
+            }
+          }
           // easy, just put the thing there
-          await this[_nodeFromEdge](edge, node.parent, null, required)
+          await this.#nodeFromEdge(edge, node.parent, null, required)
           continue
         } else {
           // if the parent's edge is very broad like >=1, and the edge in
@@ -1369,7 +1645,7 @@ This is a one-time fix-up, please be patient...
           // a conflict.  this is always a problem in strict mode, never
           // in force mode, and a problem in non-strict mode if this isn't
           // on behalf of our project.  in all such cases, we warn at least.
-          const dep = await this[_nodeFromEdge](
+          const dep = await this.#nodeFromEdge(
             parentEdge,
             node.parent,
             edge,
@@ -1384,13 +1660,19 @@ This is a one-time fix-up, please be patient...
           // allow it.  either we're overriding, or it's not something
           // that will be installed by default anyway, and we'll fail when
           // we get to the point where we need to, if we need to.
-          if (conflictOK || !required.has(dep)) {
+          if (conflictOK || !required.has(dep) || this.#loadFailures.has(dep)) {
             edge.peerConflicted = true
             continue
           }
 
+          // The recursion above may replace node with a compatible peer, detaching it.
+          // A detached node has no real conflict to report, so stop instead of crashing on it.
+          if (!node.parent) {
+            break
+          }
+
           // problem
-          this[_failPeerConflict](edge, parentEdge)
+          this.#failPeerConflict(edge, parentEdge)
         }
       }
 
@@ -1398,9 +1680,9 @@ This is a one-time fix-up, please be patient...
       // See if the thing we WOULD be happy with is also going to satisfy
       // the other dependents on the current node.
       const current = edge.to
-      const dep = await this[_nodeFromEdge](edge, null, null, required)
+      const dep = await this.#nodeFromEdge(edge, null, null, required)
       if (dep.canReplace(current)) {
-        await this[_nodeFromEdge](edge, node.parent, null, required)
+        await this.#nodeFromEdge(edge, node.parent, null, required)
         continue
       }
 
@@ -1412,22 +1694,22 @@ This is a one-time fix-up, please be patient...
       // isn't also required, then there's a good chance we won't need it,
       // so allow it for now and let it conflict if it turns out to actually
       // be necessary for the installation.
-      if (conflictOK || !required.has(edge.from)) {
+      if (conflictOK || !required.has(edge.from) || this.#loadFailures.has(current)) {
         continue
       }
 
       // ok, it's the root, or we're in unforced strict mode, so this is bad
-      this[_failPeerConflict](edge, parentEdge)
+      this.#failPeerConflict(edge, parentEdge)
     }
     return node
   }
 
-  [_failPeerConflict] (edge, currentEdge) {
-    const expl = this[_explainPeerConflict](edge, currentEdge)
+  #failPeerConflict (edge, currentEdge) {
+    const expl = this.#explainPeerConflict(edge, currentEdge)
     throw Object.assign(new Error('unable to resolve dependency tree'), expl)
   }
 
-  [_explainPeerConflict] (edge, currentEdge) {
+  #explainPeerConflict (edge, currentEdge) {
     const node = edge.from
     const curNode = node.resolve(edge.name)
     const current = curNode.explain()
@@ -1439,22 +1721,23 @@ This is a one-time fix-up, please be patient...
       // the tree handling logic.
       currentEdge: currentEdge ? currentEdge.explain() : null,
       edge: edge.explain(),
-      strictPeerDeps: this[_strictPeerDeps],
-      force: this[_force],
+      strictPeerDeps: this.#strictPeerDeps,
+      force: this.options.force,
     }
   }
 
-  // go through all the links in the this[_linkNodes] set
+  // go through all the links in the this.#linkNodes set
   // for each one:
   // - if outside the root, ignore it, assume it's fine, it's not our problem
   // - if a node in the tree already, assign the target to that node.
   // - if a path under an existing node, then assign that as the fsParent,
   //   and add it to the _depsQueue
   //
-  // call buildDepStep if anything was added to the queue, otherwise we're done
-  [_resolveLinks] () {
-    for (const link of this[_linkNodes]) {
-      this[_linkNodes].delete(link)
+  // call buildDepStep if anything was added to the queue; otherwise, we're done
+  // XXX load-virtual also has a #resolveLinks, is there overlap?
+  #resolveLinks () {
+    for (const link of this.#linkNodes) {
+      this.#linkNodes.delete(link)
 
       // link we never ended up placing, skip it
       if (link.root !== this.idealTree) {
@@ -1465,34 +1748,38 @@ This is a one-time fix-up, please be patient...
       const external = !link.target.isDescendantOf(tree)
 
       // outside the root, somebody else's problem, ignore it
-      if (external && !this[_follow]) {
+      if (external && !this.#follow) {
         continue
       }
 
       // didn't find a parent for it or it has not been seen yet
       // so go ahead and process it.
       const unseenLink = (link.target.parent || link.target.fsParent) &&
-        !this[_depsSeen].has(link.target)
+        !this.#depsSeen.has(link.target)
 
-      if (this[_follow] &&
+      if (this.#follow &&
           !link.target.parent &&
           !link.target.fsParent ||
           unseenLink) {
+        // Forward the link's overrides before its subtree resolves, so a root override reaches a transitive dep across the link boundary (npm/cli#9659).
+        if (link.overrides) {
+          link.target.updateOverridesEdgeInAdded(link.overrides)
+        }
         this.addTracker('idealTree', link.target.name, link.target.location)
-        this[_depsQueue].push(link.target)
+        this.#depsQueue.push(link.target)
       }
     }
 
-    if (this[_depsQueue].length) {
-      return this[_buildDepStep]()
+    if (this.#depsQueue.length) {
+      return this.#buildDepStep()
     }
   }
 
-  [_fixDepFlags] () {
-    process.emit('time', 'idealTree:fixDepFlags')
+  #fixDepFlags () {
+    const timeEnd = time.start('idealTree:fixDepFlags')
     const metaFromDisk = this.idealTree.meta.loadedFromDisk
     const flagsSuspect = this[_flagsSuspect]
-    const mutateTree = this[_mutateTree]
+    const mutateTree = this.#mutateTree
     // if the options set prune:false, then we don't prune, but we still
     // mark the extraneous items in the tree if we modified it at all.
     // If we did no modifications, we just iterate over the extraneous nodes.
@@ -1515,11 +1802,7 @@ This is a one-time fix-up, please be patient...
     } else {
       // otherwise just unset all the flags on the root node
       // since they will sometimes have the default value
-      this.idealTree.extraneous = false
-      this.idealTree.dev = false
-      this.idealTree.optional = false
-      this.idealTree.devOptional = false
-      this.idealTree.peer = false
+      this.idealTree.unsetDepFlags()
     }
 
     // at this point, any node marked as extraneous should be pruned.
@@ -1527,29 +1810,57 @@ This is a one-time fix-up, please be patient...
     // then the tree is suspect.  Prune what is marked as extraneous.
     // otherwise, don't bother.
     const needPrune = metaFromDisk && (mutateTree || flagsSuspect)
-    if (this[_prune] && needPrune) {
-      this[_idealTreePrune]()
+    if (this.#prune && needPrune) {
+      this.#idealTreePrune()
     }
 
-    process.emit('timeEnd', 'idealTree:fixDepFlags')
+    timeEnd()
   }
 
-  [_idealTreePrune] () {
-    for (const node of this.idealTree.inventory.filter(n => n.extraneous)) {
-      node.parent = null
+  #idealTreePrune () {
+    for (const node of this.idealTree.inventory.values()) {
+      if (node.extraneous) {
+        node.parent = null
+      }
     }
   }
 
-  [_pruneFailedOptional] () {
-    for (const node of this[_loadFailures]) {
+  #pruneFailedOptional () {
+    for (const node of this.#loadFailures) {
       if (!node.optional) {
         throw node.errors[0]
       }
 
       const set = optionalSet(node)
       for (const node of set) {
-        node.parent = null
+        node.inert = true
       }
     }
+  }
+
+  async prune (options = {}) {
+    // allow the user to set options on the ctor as well.
+    // XXX: deprecate separate method options objects.
+    options = { ...this.options, ...options }
+
+    await this.buildIdealTree(options)
+
+    this.#idealTreePrune()
+
+    if (!this.options.workspacesEnabled) {
+      const excludeNodes = this.excludeWorkspacesDependencySet(this.idealTree)
+      for (const node of this.idealTree.inventory.values()) {
+        if (
+          node.parent !== null
+          && !node.isProjectRoot
+          && !excludeNodes.has(node)
+          && !node.inert
+        ) {
+          this[_addNodeToTrashList](node)
+        }
+      }
+    }
+
+    return this.reify(options)
   }
 }

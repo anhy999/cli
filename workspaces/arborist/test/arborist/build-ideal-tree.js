@@ -4,34 +4,38 @@ if (process.platform === 'win32') {
   process.env.ARBORIST_DEBUG = 0
 }
 
-const { basename, resolve, relative } = require('path')
+const { join, basename, resolve, relative } = require('node:path')
 const pacote = require('pacote')
 const t = require('tap')
 const Arborist = require('../..')
 const fixtures = resolve(__dirname, '../fixtures')
 // load the symbolic links that we depend on
 require(fixtures)
-const { start, stop, registry, auditResponse } = require('../fixtures/registry-mocks/server.js')
 const npa = require('npm-package-arg')
-const fs = require('fs')
-const nock = require('nock')
-const semver = require('semver')
+const fs = require('node:fs')
+const MockRegistry = require('@npmcli/mock-registry')
 
-t.before(start)
-t.teardown(stop)
-
-const cache = t.testdir()
-
-// track the warnings that are emitted.  returns a function that removes
-// the listener and provides the list of what it saw.
-const warningTracker = () => {
-  const list = []
-  const onlog = (...msg) => msg[0] === 'warn' && list.push(msg)
-  process.on('log', onlog)
-  return () => {
-    process.removeListener('log', onlog)
-    return list
+const createRegistry = (t, mocks = false) => {
+  const registry = new MockRegistry({
+    strict: true,
+    tap: t,
+    registry: 'https://registry.npmjs.org',
+  })
+  if (mocks) {
+    registry.mocks({ dir: join(__dirname, '..', 'fixtures') })
   }
+  return registry
+}
+
+// track the warnings that are emitted.  returns the list of what it saw
+const warningTracker = (t) => {
+  const warnings = []
+  const onlog = (...msg) => msg[0] === 'warn' && warnings.push(msg)
+  process.on('log', onlog)
+  t.teardown(() => {
+    process.removeListener('log', onlog)
+  })
+  return warnings
 }
 
 const {
@@ -53,93 +57,38 @@ This is a one-time fix-up, please be patient...
 
 const cwd = normalizePath(process.cwd())
 t.cleanSnapshot = s => s.split(cwd).join('{CWD}')
-  .split(registry).join('https://registry.npmjs.org/')
 
-const printIdeal = (path, opt) => buildIdeal(path, opt).then(printTree)
-
+const cache = t.testdir()
 // give it a very long timeout so CI doesn't crash as easily
-const OPT = { cache, registry, timeout: 30 * 60 * 1000 }
-
-const newArb = (path, opt = {}) => new Arborist({ ...OPT, path, ...opt })
+const newArb = (path, opt = {}) => new Arborist({ timeout: 30 * 60 * 1000, path, cache, ...opt })
 const buildIdeal = (path, opt) => newArb(path, opt).buildIdealTree(opt)
-
-const generateNocks = (t, spec) => {
-  nock.disableNetConnect()
-
-  const getDeps = (version, deps) =>
-    (deps || []).reduce((result, dep) => {
-      if (typeof dep === 'string') {
-        return {
-          ...result,
-          [dep]: version,
-        }
-      } else {
-        return {
-          ...result,
-          ...(version in dep ? { [dep[version]]: version } : {}),
-        }
-      }
-    }, {})
-
-  for (const name in spec) {
-    const pkg = spec[name]
-
-    const packument = {
-      name,
-      'dist-tags': {
-        latest: pkg.latest || semver.maxSatisfying(pkg.versions, '*'),
-      },
-      versions: pkg.versions.reduce((versions, version) => {
-        return {
-          ...versions,
-          [version]: {
-            name,
-            version,
-            dependencies: getDeps(version, pkg.dependencies),
-            peerDependencies: getDeps(version, pkg.peerDependencies),
-          },
-        }
-      }, {}),
-    }
-
-    nock(registry)
-      .persist()
-      .get(`/${name}`)
-      .reply(200, packument)
-  }
-
-  t.teardown(async () => {
-    nock.enableNetConnect()
-    nock.cleanAll()
-  })
-}
+const printIdeal = (path, opt) => buildIdeal(path, opt).then(printTree)
 
 t.test('fail on mismatched engine when engineStrict is set', async t => {
   const path = resolve(fixtures, 'engine-specification')
 
-  t.rejects(buildIdeal(path, {
-    ...OPT,
+  await t.rejects(buildIdeal(path, {
     nodeVersion: '12.18.4',
     engineStrict: true,
-  }).then(() => {
-    throw new Error('failed to fail')
-  }), { code: 'EBADENGINE' })
+  }),
+  { code: 'EBADENGINE' },
+  'should fail with EBADENGINE error'
+  )
 })
 
-t.test('fail on malformed package.json', t => {
+t.test('fail on malformed package.json', async t => {
   const path = resolve(fixtures, 'malformed-json')
 
-  return t.rejects(
+  await t.rejects(
     buildIdeal(path),
     { code: 'EJSONPARSE' },
     'should fail with EJSONPARSE error'
   )
 })
 
-t.test('ignore mismatched engine for optional dependencies', async t => {
+t.test('ignore mismatched engine for optional dependencies', async () => {
   const path = resolve(fixtures, 'optional-engine-specification')
   await buildIdeal(path, {
-    ...OPT,
     nodeVersion: '12.18.4',
     engineStrict: true,
   })
@@ -147,52 +96,51 @@ t.test('ignore mismatched engine for optional dependencies', async t => {
 
 t.test('warn on mismatched engine when engineStrict is false', t => {
   const path = resolve(fixtures, 'engine-specification')
-  const check = warningTracker()
+  createRegistry(t, false)
+  const warnings = warningTracker(t)
   return buildIdeal(path, {
-    ...OPT,
     nodeVersion: '12.18.4',
     engineStrict: false,
-  }).then(() => t.match(check(), [
+  }).then(() => t.match(warnings, [
     ['warn', 'EBADENGINE'],
   ]))
 })
 
 t.test('fail on mismatched platform', async t => {
   const path = resolve(fixtures, 'platform-specification')
-  t.rejects(buildIdeal(path, {
-    ...OPT,
+  createRegistry(t, true)
+  await t.rejects(buildIdeal(path, {
     nodeVersion: '4.0.0',
-  }).then(() => {
-    throw new Error('failed to fail')
   }), { code: 'EBADPLATFORM' })
 })
 
 t.test('ignore mismatched platform for optional dependencies', async t => {
   const path = resolve(fixtures, 'optional-platform-specification')
+  createRegistry(t, true)
   const tree = await buildIdeal(path, {
-    ...OPT,
     nodeVersion: '12.18.4',
     engineStrict: true,
   })
   t.equal(tree.children.get('platform-specifying-test-package').package.version, '1.0.0', 'added the optional dep to the ideal tree')
 })
 
-t.test('no options', t => {
+t.test('no options', async t => {
   const arb = new Arborist()
   t.match(
     arb.registry,
     'https://registry.npmjs.org',
     'should use default registry'
   )
-  t.end()
 })
 
 t.test('a workspace with a conflicted nested duplicated dep', async t => {
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(resolve(fixtures, 'workspace4')))
 })
 
 t.test('a tree with an outdated dep, missing dep, no lockfile', async t => {
   const path = resolve(fixtures, 'outdated-no-lockfile')
+  createRegistry(t, true)
   const tree = await buildIdeal(path)
   const expected = {
     once: '1.3.3',
@@ -205,14 +153,17 @@ t.test('a tree with an outdated dep, missing dep, no lockfile', async t => {
   t.matchSnapshot(printTree(tree), 'should not update all')
 })
 
-t.test('tarball deps with transitive tarball deps', t =>
-  t.resolveMatchSnapshot(printIdeal(
-    resolve(fixtures, 'tarball-dependencies'))))
+t.test('tarball deps with transitive tarball deps', async t => {
+  createRegistry(t, false)
+  await t.resolveMatchSnapshot(printIdeal(
+    resolve(fixtures, 'tarball-dependencies')))
+})
 
 t.test('testing-peer-deps-overlap package', async t => {
   const path = resolve(fixtures, 'testing-peer-deps-overlap')
+  createRegistry(t, true)
   const idealTree = await buildIdeal(path)
-  const arb = new Arborist({ path, idealTree, ...OPT })
+  const arb = newArb(path, { idealTree })
   const tree2 = await arb.buildIdealTree()
   t.equal(tree2, idealTree)
   t.matchSnapshot(printTree(idealTree), 'build ideal tree with overlapping peer dep ranges')
@@ -220,95 +171,98 @@ t.test('testing-peer-deps-overlap package', async t => {
 
 t.test('testing-peer-deps package', async t => {
   const path = resolve(fixtures, 'testing-peer-deps')
+  createRegistry(t, true)
   const idealTree = await buildIdeal(path)
-  const arb = new Arborist({ path, idealTree, ...OPT })
+  const arb = newArb(path, { idealTree })
   const tree2 = await arb.buildIdealTree()
   t.equal(tree2, idealTree)
   t.matchSnapshot(printTree(idealTree), 'build ideal tree with peer deps')
 })
 
-t.test('testing-peer-deps package with symlinked root', t => {
+t.test('testing-peer-deps package with symlinked root', async t => {
   const path = resolve(fixtures, 'testing-peer-deps-link')
-  return buildIdeal(path).then(idealTree => {
-    t.ok(idealTree.isLink, 'ideal tree is rooted on a Link')
-    return new Arborist({ path, idealTree, ...OPT })
-      .buildIdealTree().then(tree2 => t.equal(tree2, idealTree))
-      .then(() => t.matchSnapshot(printTree(idealTree), 'build ideal tree with peer deps'))
-  })
+  createRegistry(t, true)
+  const idealTree = await buildIdeal(path)
+  t.ok(idealTree.isLink, 'ideal tree is rooted on a Link')
+  const arb = newArb(path, { idealTree })
+  const tree2 = await arb.buildIdealTree()
+  t.equal(tree2, idealTree)
+  t.matchSnapshot(printTree(idealTree), 'build ideal tree with peer deps')
 })
 
-t.test('testing-peer-deps nested', t => {
+t.test('testing-peer-deps nested', async t => {
   const path = resolve(fixtures, 'testing-peer-deps-nested')
-  return t.resolveMatchSnapshot(printIdeal(path), 'build ideal tree')
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      // hit the branch where update is just a list of names
-      update: ['@isaacs/testing-peer-deps'],
-    }), 'can update a peer dep cycle'))
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'build ideal tree')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    // hit the branch where update is just a list of names
+    update: ['@isaacs/testing-peer-deps'],
+  }), 'can update a peer dep cycle')
 })
 
-t.test('tap vs react15', t => {
+t.test('tap vs react15', async t => {
   const path = resolve(fixtures, 'tap-react15-collision')
-  return t.resolveMatchSnapshot(printIdeal(path), 'build ideal tree with tap collision')
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'build ideal tree with tap collision')
 })
 
-t.test('tap vs react15 with legacy shrinkwrap', t => {
+t.test('tap vs react15 with legacy lockfile', async t => {
   const path = resolve(fixtures, 'tap-react15-collision-legacy-sw')
-  return t.resolveMatchSnapshot(printIdeal(path), 'tap collision with legacy sw file')
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'tap collision with legacy lockfile')
 })
 
-t.test('bad shrinkwrap file', t => {
-  const path = resolve(fixtures, 'testing-peer-deps-bad-sw')
-  return t.resolveMatchSnapshot(printIdeal(path), 'bad shrinkwrap')
-})
-
-t.test('a direct link dep has a dep with optional dependencies', t => {
+t.test('a direct link dep has a dep with optional dependencies', async t => {
   const path = resolve(fixtures, 'link-dep-has-dep-with-optional-dep')
-  return t.resolveMatchSnapshot(printIdeal(path), 'should not mark children of the optional dep as extraneous')
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'should not mark children of the optional dep as extraneous')
 })
 
-t.test('cyclical peer deps', t => {
+t.test('cyclical peer deps', async t => {
   const paths = [
     resolve(fixtures, 'peer-dep-cycle'),
     resolve(fixtures, 'peer-dep-cycle-with-sw'),
   ]
-
-  t.plan(paths.length)
-  paths.forEach(path => t.test(basename(path), t =>
-    t.resolveMatchSnapshot(printIdeal(path), 'cyclical peer deps')
-      .then(() => t.resolveMatchSnapshot(printIdeal(path, {
+  createRegistry(t, true)
+  for (const path of paths) {
+    await t.test(basename(path), async t => {
+      await t.resolveMatchSnapshot(printIdeal(path), 'cyclical peer deps')
+      await t.resolveMatchSnapshot(printIdeal(path, {
         // just reload the dep at its current required version
         add: ['@isaacs/peer-dep-cycle-a'],
-      }), 'cyclical peer deps - reload a dependency'))
-      .then(() => t.resolveMatchSnapshot(printIdeal(path, {
+      }), 'cyclical peer deps - reload a dependency')
+      await t.resolveMatchSnapshot(printIdeal(path, {
         add: ['@isaacs/peer-dep-cycle-a@2.x'],
-      }), 'cyclical peer deps - upgrade a package'))
-      .then(() => t.rejects(printIdeal(path, {
+      }), 'cyclical peer deps - upgrade a package')
+      await t.rejects(printIdeal(path, {
         // this conflicts with the direct dep on a@1 PEER-> b@1
         add: ['@isaacs/peer-dep-cycle-b@2.x'],
-      })))
-    // this conflict is ok since we're using legacy peer deps
-      .then(() => t.resolveMatchSnapshot(printIdeal(path, {
+      }))
+      // this conflict is ok since we're using legacy peer deps
+      await t.resolveMatchSnapshot(printIdeal(path, {
         add: ['@isaacs/peer-dep-cycle-b@2.x'],
         legacyPeerDeps: true,
-      }), 'add b@2.x with legacy peer deps'))
-      .then(() => t.resolveMatchSnapshot(printIdeal(path, {
+      }), 'add b@2.x with legacy peer deps')
+      await t.resolveMatchSnapshot(printIdeal(path, {
         // use @latest rather than @2.x to exercise the 'explicit tag' path
         add: ['@isaacs/peer-dep-cycle-b@latest'],
         rm: ['@isaacs/peer-dep-cycle-a'],
-      }), 'can add b@2 if we remove a@1 dep'))
-      .then(() => t.resolveMatchSnapshot(printIdeal(path, {
+      }), 'can add b@2 if we remove a@1 dep')
+      await t.resolveMatchSnapshot(printIdeal(path, {
         rm: ['@isaacs/peer-dep-cycle-a'],
-      }), 'remove the dep, prune everything'))
-  ))
+      }), 'remove the dep, prune everything')
+    })
+  }
 })
 
-t.test('nested cyclical peer deps', t => {
+t.test('nested cyclical peer deps', async t => {
+  const registry = createRegistry(t, true)
   const paths = [
     resolve(fixtures, 'peer-dep-cycle-nested'),
     resolve(fixtures, 'peer-dep-cycle-nested-with-sw'),
   ]
 
-  // if we have a shrinkwrap, then we'll get a collision with the current
+  // if we have a lockfile, then we'll get a collision with the current
   // version already there.  if we don't, then we'll get a peerConflict
   // when we try to put the second one there.
   const ers = {
@@ -320,96 +274,100 @@ t.test('nested cyclical peer deps', t => {
     },
   }
 
-  t.plan(paths.length)
-  paths.forEach(path => t.test(basename(path), async t => {
-    t.matchSnapshot(await printIdeal(path), 'nested peer deps cycle')
-
-    t.matchSnapshot(await printIdeal(path, {
-      // just make sure it works if it gets a spec object
-      add: [npa('@isaacs/peer-dep-cycle-a@2.x')],
-    }), 'upgrade a')
-
-    t.matchSnapshot(await printIdeal(path, {
-      // a dep whose name we don't yet know
-      add: [
-        '@isaacs/peer-dep-cycle-a@2.x',
-        `${registry}@isaacs/peer-dep-cycle-b/-/peer-dep-cycle-b-2.0.0.tgz`,
-      ],
-    }), 'upgrade b')
-
-    t.matchSnapshot(await printIdeal(path, {
-      force: true,
-      add: ['@isaacs/peer-dep-cycle-c@2.x'],
-    }), 'upgrade c, forcibly')
-
-    await t.rejects(printIdeal(path, {
-      add: [
-        '@isaacs/peer-dep-cycle-a@1.x',
-        '@isaacs/peer-dep-cycle-c@2.x',
-      ],
-    }), ers[path], 'try (and fail) to upgrade c and a incompatibly')
-  }))
+  for (const path of paths) {
+    await t.test(basename(path), async t => {
+      await t.resolveMatchSnapshot(printIdeal(path), 'nested peer deps cycle')
+      await t.resolveMatchSnapshot(printIdeal(path, {
+        // just make sure it works if it gets a spec object
+        add: [npa('@isaacs/peer-dep-cycle-a@2.x')],
+      }), 'upgrade a')
+      await t.resolveMatchSnapshot(printIdeal(path, {
+        // a dep whose name we don't yet know
+        add: [
+          '@isaacs/peer-dep-cycle-a@2.x',
+          `${registry.origin}/@isaacs/peer-dep-cycle-b/-/peer-dep-cycle-b-2.0.0.tgz`,
+        ],
+      }), 'upgrade b')
+      await t.resolveMatchSnapshot(printIdeal(path, {
+        force: true,
+        add: ['@isaacs/peer-dep-cycle-c@2.x'],
+      }), 'upgrade c, forcibly')
+      await t.rejects(printIdeal(path, {
+        add: [
+          '@isaacs/peer-dep-cycle-a@1.x',
+          '@isaacs/peer-dep-cycle-c@2.x',
+        ],
+      }), ers[path], 'try (and fail) to upgrade c and a incompatibly')
+    })
+  }
 })
 
-t.test('dedupe example - not deduped', t => {
+t.test('dedupe example - not deduped', async t => {
+  createRegistry(t, true)
   const path = resolve(fixtures, 'dedupe-tests')
-  return t.resolveMatchSnapshot(printIdeal(path), 'dedupe testing')
+  await t.resolveMatchSnapshot(printIdeal(path), 'dedupe testing')
 })
 
-t.test('dedupe example - deduped because preferDedupe=true', t => {
+t.test('dedupe example - deduped because preferDedupe=true', async t => {
+  createRegistry(t, true)
   const path = resolve(fixtures, 'dedupe-tests')
-  return t.resolveMatchSnapshot(printIdeal(path, { preferDedupe: true }))
+  await t.resolveMatchSnapshot(printIdeal(path, { preferDedupe: true }))
 })
 
-t.test('dedupe example - nested because legacyBundling=true', t => {
+t.test('dedupe example - nested because legacyBundling=true', async t => {
   const path = resolve(fixtures, 'dedupe-tests')
-  return t.resolveMatchSnapshot(printIdeal(path, {
-    legacyBundling: true,
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    installStrategy: 'nested',
     preferDedupe: true,
   }))
 })
 
-t.test('dedupe example - deduped', t => {
+t.test('dedupe example - deduped', async t => {
   const path = resolve(fixtures, 'dedupe-tests-2')
-  return t.resolveMatchSnapshot(printIdeal(path), 'dedupe testing')
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'dedupe testing')
 })
 
 t.test('expose explicitRequest', async t => {
   const path = resolve(fixtures, 'simple')
-  const arb = new Arborist({ ...OPT, path })
+  createRegistry(t, true)
+  const arb = newArb(path)
   await arb.buildIdealTree({ add: ['abbrev'] })
   t.match(arb.explicitRequests, Set, 'exposes the explicit request Set')
   t.strictSame([...arb.explicitRequests].map(e => e.name), ['abbrev'])
-  t.end()
 })
 
-t.test('bundle deps example 1, empty', t => {
+t.test('bundle deps example 1, empty', async t => {
   // NB: this results in ignoring the bundled deps when building the
   // ideal tree.  When we reify, we'll have to ignore the deps that
   // got placed as part of the bundle.
   const path = resolve(fixtures, 'testing-bundledeps-empty')
-  return t.resolveMatchSnapshot(printIdeal(path), 'bundle deps testing')
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      saveBundle: true,
-      add: ['@isaacs/testing-bundledeps'],
-    }), 'should have some missing deps in the ideal tree'))
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'bundle deps testing')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    saveBundle: true,
+    add: ['@isaacs/testing-bundledeps'],
+  }), 'should have some missing deps in the ideal tree')
 })
 
-t.test('bundle deps example 1, full', t => {
+t.test('bundle deps example 1, full', async t => {
   // In this test, bundle deps show up, because they're present in
   // the actual tree to begin with.
   const path = resolve(fixtures, 'testing-bundledeps')
-  return t.resolveMatchSnapshot(printIdeal(path), 'no missing deps')
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      saveBundle: true,
-      add: ['@isaacs/testing-bundledeps'],
-    }), 'add stuff, no missing deps'))
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'no missing deps')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    saveBundle: true,
+    add: ['@isaacs/testing-bundledeps'],
+  }), 'add stuff, no missing deps')
 })
 
 t.test('bundle deps example 1, complete:true', async t => {
   // When complete:true is set, we extract into a temp dir to read
   // the bundled deps, so they ARE included, just like during reify()
   const path = resolve(fixtures, 'testing-bundledeps-empty')
+  createRegistry(t, true)
 
   // wrap pacote.extract in a spy so we can be sure the integrity and resolved
   // options both made it through
@@ -427,141 +385,113 @@ t.test('bundle deps example 1, complete:true', async t => {
     return res
   }
 
-  t.matchSnapshot(await printIdeal(path, {
+  await t.resolveMatchSnapshot(printIdeal(path, {
     complete: true,
   }), 'no missing deps, because complete: true')
-  t.matchSnapshot(await printIdeal(path, {
+  await t.resolveMatchSnapshot(printIdeal(path, {
     saveBundle: true,
     add: ['@isaacs/testing-bundledeps'],
     complete: true,
   }), 'no missing deps, because complete: true, add dep, save bundled')
 })
 
-t.test('bundle deps example 2', t => {
+t.test('bundle deps example 2', async t => {
   // bundled deps at the root level are NOT ignored when building ideal trees
   const path = resolve(fixtures, 'testing-bundledeps-2')
-  return t.resolveMatchSnapshot(printIdeal(path), 'bundle deps testing')
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      saveBundle: true,
-      add: ['@isaacs/testing-bundledeps-c'],
-    }), 'add new bundled dep c'))
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      rm: ['@isaacs/testing-bundledeps-a'],
-    }), 'remove bundled dependency a'))
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'bundle deps testing')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    saveBundle: true,
+    add: ['@isaacs/testing-bundledeps-c'],
+  }), 'add new bundled dep c')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    rm: ['@isaacs/testing-bundledeps-a'],
+  }), 'remove bundled dependency a')
 })
 
-t.test('bundle deps example 2, link', t => {
+t.test('bundle deps example 2, link', async t => {
   // bundled deps at the root level are NOT ignored when building ideal trees
   const path = resolve(fixtures, 'testing-bundledeps-link')
-  return t.resolveMatchSnapshot(printIdeal(path), 'bundle deps testing')
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      saveBundle: true,
-      add: ['@isaacs/testing-bundledeps-c'],
-    }), 'add new bundled dep c'))
-    .then(() => t.resolveMatchSnapshot(printIdeal(path, {
-      rm: ['@isaacs/testing-bundledeps-a'],
-    }), 'remove bundled dependency a'))
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'bundle deps testing')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    saveBundle: true,
+    add: ['@isaacs/testing-bundledeps-c'],
+  }), 'add new bundled dep c')
+  await t.resolveMatchSnapshot(printIdeal(path, {
+    rm: ['@isaacs/testing-bundledeps-a'],
+  }), 'remove bundled dependency a')
 })
 
-t.test('unresolvable peer deps', t => {
+t.test('unresolvable peer deps', async t => {
   const path = resolve(fixtures, 'testing-peer-deps-unresolvable')
+  createRegistry(t, true)
 
-  return t.rejects(printIdeal(path, { strictPeerDeps: true }), {
+  await t.rejects(printIdeal(path, { strictPeerDeps: true }), {
     message: 'unable to resolve dependency tree',
     code: 'ERESOLVE',
   }, 'unacceptable')
 })
 
-t.test('do not add shrinkwrapped deps', t => {
-  const path = resolve(fixtures, 'shrinkwrapped-dep-no-lock')
-  return t.resolveMatchSnapshot(printIdeal(path, { update: true }))
+t.test('deduped transitive deps with asymmetrical bin declaration', async t => {
+  const path = resolve(fixtures, 'testing-asymmetrical-bin-no-lock')
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(path), 'with no lockfile')
 })
 
-t.test('do add shrinkwrapped deps when complete:true is set', t => {
-  const path = resolve(fixtures, 'shrinkwrapped-dep-no-lock')
-  return t.resolveMatchSnapshot(printIdeal(path, {
-    complete: true,
-    update: true,
-  }))
+t.test('deduped transitive deps with asymmetrical bin declaration', async t => {
+  const path = resolve(fixtures, 'testing-asymmetrical-bin-with-lock')
+  createRegistry(t, false)
+  await t.resolveMatchSnapshot(printIdeal(path), 'with lockfile')
 })
 
-t.test('do not update shrinkwrapped deps', t => {
-  const path = resolve(fixtures, 'shrinkwrapped-dep-with-lock')
-  return t.resolveMatchSnapshot(printIdeal(path,
-    { update: { names: ['abbrev'] } }))
-})
-
-t.test('do not update shrinkwrapped deps, ignore lockfile', t => {
-  const path = resolve(fixtures, 'shrinkwrapped-dep-with-lock')
-  return t.resolveMatchSnapshot(printIdeal(path,
-    { packageLock: false, update: { names: ['abbrev'] } }))
-})
-
-t.test('do not update shrinkwrapped deps when complete:true is set', t => {
-  const path = resolve(fixtures, 'shrinkwrapped-dep-with-lock')
-  return t.resolveMatchSnapshot(printIdeal(path,
-    { update: { names: ['abbrev'] }, complete: true }))
-})
-
-t.test('deduped transitive deps with asymmetrical bin declaration', t => {
-  const path =
-    resolve(fixtures, 'testing-asymmetrical-bin-no-lock')
-  return t.resolveMatchSnapshot(printIdeal(path), 'with no lockfile')
-})
-
-t.test('deduped transitive deps with asymmetrical bin declaration', t => {
-  const path =
-    resolve(fixtures, 'testing-asymmetrical-bin-with-lock')
-  return t.resolveMatchSnapshot(printIdeal(path), 'with lockfile')
-})
-
-t.test('update', t => {
-  t.test('flow outdated', t => {
+t.test('update', async t => {
+  await t.test('flow outdated', async t => {
+    createRegistry(t, true)
     const flowOutdated = resolve(fixtures, 'flow-outdated')
-
-    t.resolveMatchSnapshot(printIdeal(flowOutdated, {
+    await t.resolveMatchSnapshot(printIdeal(flowOutdated, {
       update: {
         names: ['flow-parser'],
       },
     }), 'update flow parser')
-
-    t.resolveMatchSnapshot(printIdeal(flowOutdated, {
+    await t.resolveMatchSnapshot(printIdeal(flowOutdated, {
       update: true,
     }), 'update everything')
-
-    t.end()
   })
 
-  t.test('tap and flow', t => {
+  await t.test('tap and flow', async t => {
+    createRegistry(t, true)
     const tapAndFlow = resolve(fixtures, 'tap-and-flow')
-    t.resolveMatchSnapshot(printIdeal(tapAndFlow, {
+    await t.resolveMatchSnapshot(printIdeal(tapAndFlow, {
       update: {
         all: true,
       },
     }), 'update everything')
-    t.resolveMatchSnapshot(printIdeal(tapAndFlow, {
+    await t.resolveMatchSnapshot(printIdeal(tapAndFlow, {
       update: {
         names: ['ink'],
       },
     }), 'update ink')
-
-    t.end()
   })
-
-  t.end()
 })
 
-t.test('link meta deps', t =>
-  t.resolveMatchSnapshot(printIdeal(
-    resolve(fixtures, 'link-meta-deps-empty'))))
+t.test('link meta deps', async t => {
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(
+    resolve(fixtures, 'link-meta-deps-empty')))
+})
 
-t.test('respect the yarn.lock file', t =>
-  t.resolveMatchSnapshot(printIdeal(
-    resolve(fixtures, 'yarn-lock-mkdirp'))))
+t.test('respect the yarn.lock file', async t => {
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(
+    resolve(fixtures, 'yarn-lock-mkdirp')))
+})
 
-t.test('respect the yarn.lock file version, if lacking resolved', t =>
-  t.resolveMatchSnapshot(printIdeal(
-    resolve(fixtures, 'yarn-lock-mkdirp-no-resolved'))))
+t.test('respect the yarn.lock file version, if lacking resolved', async t => {
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(
+    resolve(fixtures, 'yarn-lock-mkdirp-no-resolved')))
+})
 
 t.test('optional dependency failures', async t => {
   const cases = [
@@ -571,34 +501,37 @@ t.test('optional dependency failures', async t => {
     'optional-metadep-enotarget',
     'optional-metadep-missing',
   ]
-  t.plan(cases.length)
+  createRegistry(t, true)
   for (const c of cases) {
     const tree = await printIdeal(resolve(fixtures, c))
     t.matchSnapshot(tree, c)
   }
 })
 
-t.test('prod dependency failures', t => {
+t.test('prod dependency failures', async t => {
   const cases = [
     'prod-dep-enotarget',
     'prod-dep-missing',
   ]
-  t.plan(cases.length)
-  cases.forEach(c => t.rejects(printIdeal(
-    resolve(fixtures, c)), c))
+  createRegistry(t, true)
+  for (const c of cases) {
+    await t.rejects(printIdeal(resolve(fixtures, c)), c)
+  }
 })
 
-t.test('link dep with a link dep', t => {
+t.test('link dep with a link dep', async t => {
   const path = resolve(fixtures, 'cli-750')
-  return Promise.all([
+  createRegistry(t, false)
+  await Promise.all([
     t.resolveMatchSnapshot(printIdeal(path), 'link metadeps with lockfile'),
     t.resolveMatchSnapshot(printIdeal(path, { update: true }), 'link metadeps without lockfile'),
   ])
 })
 
-t.test('link dep within node_modules and outside root', t => {
+t.test('link dep within node_modules and outside root', async t => {
   const path = resolve(fixtures, 'external-link-dep')
-  return Promise.all([
+  createRegistry(t, true)
+  await Promise.all([
     t.resolveMatchSnapshot(printIdeal(path), 'linky deps with lockfile'),
     t.resolveMatchSnapshot(printIdeal(path, { update: true }), 'linky deps without lockfile'),
     t.resolveMatchSnapshot(printIdeal(path, { follow: true }), 'linky deps followed'),
@@ -606,27 +539,37 @@ t.test('link dep within node_modules and outside root', t => {
   ])
 })
 
-t.test('global style', t => t.resolveMatchSnapshot(printIdeal(t.testdir(), {
-  globalStyle: true,
-  add: ['rimraf'],
-})))
+t.test('global style', async t => {
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(t.testdir(), {
+    installStrategy: 'shallow',
+    add: ['rimraf'],
+  }))
+})
 
-t.test('global', t => t.resolveMatchSnapshot(printIdeal(t.testdir(), {
-  global: true,
-  add: ['rimraf'],
-})))
+t.test('global', async t => {
+  createRegistry(t, true)
+  await t.resolveMatchSnapshot(printIdeal(t.testdir(), {
+    global: true,
+    add: ['rimraf'],
+  }))
+})
 
-t.test('global has to add or remove', t => t.rejects(printIdeal(t.testdir(), {
-  global: true,
-})))
+t.test('global has to add or remove', async t => {
+  createRegistry(t, false)
+  await t.rejects(printIdeal(t.testdir(), {
+    global: true,
+  }))
+})
 
-// somewhat copy-pasta from the test/arborist/audit.js to exercise
-// the buildIdealTree code paths
+// // somewhat copy-pasta from the test/arborist/audit.js to exercise
+// // the buildIdealTree code paths
 t.test('update mkdirp to non-minimist-using version', async t => {
   const path = resolve(fixtures, 'deprecated-dep')
-  t.teardown(auditResponse(resolve(fixtures, 'audit-nyc-mkdirp/audit.json')))
+  const registry = createRegistry(t, true)
+  registry.audit({ convert: true, results: require('../fixtures/audit-nyc-mkdirp/audit.json') })
 
-  const arb = new Arborist({ path, ...OPT })
+  const arb = newArb(path)
 
   await arb.audit()
   t.matchSnapshot(printTree(await arb.buildIdealTree()))
@@ -634,29 +577,44 @@ t.test('update mkdirp to non-minimist-using version', async t => {
 
 t.test('force a new nyc (and update mkdirp nicely)', async t => {
   const path = resolve(fixtures, 'audit-nyc-mkdirp')
-  t.teardown(auditResponse(resolve(fixtures, 'audit-nyc-mkdirp/audit.json')))
+  const registry = createRegistry(t, true)
+  // TODO why does this infinite loop if no results?
+  registry.audit({ convert: true, results: require('../fixtures/audit-nyc-mkdirp/audit.json') })
 
-  const arb = new Arborist({
-    force: true,
-    path,
-    ...OPT,
-  })
-
+  const arb = newArb(path, { force: true })
   await arb.audit()
   t.matchSnapshot(printTree(await arb.buildIdealTree()))
   t.equal(arb.idealTree.children.get('mkdirp').package.version, '0.5.5')
   t.equal(arb.idealTree.children.get('nyc').package.version, '15.1.0')
 })
 
+t.test('audit fix warns when min-release-age blocks a fix', async t => {
+  const path = resolve(fixtures, 'audit-nyc-mkdirp')
+  const registry = createRegistry(t, true)
+  registry.audit({ convert: true, results: require('../fixtures/audit-nyc-mkdirp/audit.json') })
+  const warnings = warningTracker(t)
+
+  // mkdirp's fix (0.5.5) was published after this cutoff, so audit fix can't
+  // install it and should warn that the package is left vulnerable.
+  const arb = newArb(path, { before: new Date('2020-01-01') })
+  await arb.audit()
+  await arb.buildIdealTree()
+
+  t.not(arb.idealTree.children.get('mkdirp').package.version, '0.5.5',
+    'mkdirp was not upgraded to the release-age-blocked fix')
+  t.ok(
+    warnings.some(w => w[1] === 'audit' &&
+      /A fix for mkdirp is available \(mkdirp@0\.5\.5\) but was published after/.test(w[2])),
+    'warned that the mkdirp fix is blocked by the release-age window'
+  )
+})
+
 t.test('force a new mkdirp (but not semver major)', async t => {
   const path = resolve(fixtures, 'mkdirp-pinned')
-  t.teardown(auditResponse(resolve(fixtures, 'audit-nyc-mkdirp/audit.json')))
+  const registry = createRegistry(t, true)
+  registry.audit({ convert: true, results: require('../fixtures/audit-nyc-mkdirp/audit.json') })
 
-  const arb = new Arborist({
-    force: true,
-    path,
-    ...OPT,
-  })
+  const arb = newArb(path, { force: true })
 
   await arb.audit()
   t.matchSnapshot(printTree(await arb.buildIdealTree()))
@@ -665,6 +623,7 @@ t.test('force a new mkdirp (but not semver major)', async t => {
 })
 
 t.test('empty update should not trigger old lockfile', async t => {
+  createRegistry(t, false)
   const path = t.testdir({
     'package.json': JSON.stringify({
       name: 'empty-update',
@@ -673,7 +632,7 @@ t.test('empty update should not trigger old lockfile', async t => {
     'package-lock.json': JSON.stringify({
       name: 'empty-update',
       version: '1.0.0',
-      lockfileVersion: 2,
+      lockfileVersion: 3,
       requires: true,
       packages: {
         '': {
@@ -683,15 +642,16 @@ t.test('empty update should not trigger old lockfile', async t => {
       },
     }),
   })
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
 
   const arb = newArb(path)
   await arb.reify({ update: true })
 
-  t.strictSame(checkLogs(), [])
+  t.strictSame(warnings, [])
 })
 
 t.test('update v3 doesnt downgrade lockfile', async t => {
+  createRegistry(t, false)
   const fixt = t.testdir({
     'package-lock.json': JSON.stringify({
       name: 'empty-update-v3',
@@ -721,19 +681,16 @@ t.test('update v3 doesnt downgrade lockfile', async t => {
 
 t.test('no fix available', async t => {
   const path = resolve(fixtures, 'audit-mkdirp/mkdirp-unfixable')
-  const checkLogs = warningTracker()
-  t.teardown(auditResponse(resolve(path, 'audit.json')))
+  const warnings = warningTracker(t)
+  const registry = createRegistry(t, true)
+  registry.audit({ convert: true, results: require(resolve(path, 'audit.json')) })
 
-  const arb = new Arborist({
-    force: true,
-    path,
-    ...OPT,
-  })
+  const arb = newArb(path, { force: true })
 
   await arb.audit()
   t.matchSnapshot(printTree(await arb.buildIdealTree()))
   t.equal(arb.idealTree.children.get('mkdirp').package.version, '0.5.1')
-  t.match(checkLogs(), [
+  t.match(warnings, [
     oldLockfileWarning,
     ['warn', 'audit', 'No fix available for mkdirp@*'],
   ])
@@ -741,18 +698,15 @@ t.test('no fix available', async t => {
 
 t.test('no fix available, linked top package', async t => {
   const path = resolve(fixtures, 'audit-mkdirp')
-  const checkLogs = warningTracker()
-  t.teardown(auditResponse(resolve(path, 'mkdirp-unfixable/audit.json')))
+  const warnings = warningTracker(t)
+  const registry = createRegistry(t, true)
+  registry.audit({ convert: true, results: require(resolve(path, 'mkdirp-unfixable', 'audit.json')) })
 
-  const arb = new Arborist({
-    force: true,
-    path,
-    ...OPT,
-  })
+  const arb = newArb(path, { force: true })
 
   await arb.audit()
   t.matchSnapshot(printTree(await arb.buildIdealTree()))
-  t.strictSame(checkLogs(), [
+  t.strictSame(warnings, [
     oldLockfileWarning,
     ['warn', 'audit',
       'Manual fix required in linked project at ./mkdirp-unfixable for mkdirp@*.\n' +
@@ -760,71 +714,84 @@ t.test('no fix available, linked top package', async t => {
     ]])
 })
 
-t.test('workspaces', t => {
-  t.test('should install a simple example', t => {
+t.test('workspaces', async t => {
+  await t.test('should install a simple example', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-simple')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should update a simple example', t => {
+  await t.test('should update a simple example', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-simple')
-    return t.resolveMatchSnapshot(printIdeal(path, { update: { all: true } }))
+    await t.resolveMatchSnapshot(printIdeal(path, { update: { all: true } }))
   })
 
-  t.test('should install a simple scoped pkg example', t => {
+  await t.test('should install a simple scoped pkg example', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-scoped-pkg')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should not work with duplicate names', t => {
+  await t.test('should not work with duplicate names', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-duplicate')
-    return t.rejects(printIdeal(path), { code: 'EDUPLICATEWORKSPACE' }, 'throws EDUPLICATEWORKSPACE error')
+    await t.rejects(printIdeal(path), { code: 'EDUPLICATEWORKSPACE' }, 'throws EDUPLICATEWORKSPACE error')
   })
 
-  t.test('should install shared dependencies into root folder', t => {
+  await t.test('should install shared dependencies into root folder', async t => {
+    createRegistry(t, true)
     const path = resolve(__dirname, '../fixtures/workspaces-shared-deps')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should install conflicting dep versions', t => {
+  await t.test('should install conflicting dep versions', async t => {
+    createRegistry(t, true)
     const path = resolve(__dirname, '../fixtures/workspaces-conflicting-versions')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should prefer linking nested workspaces', t => {
+  await t.test('should prefer linking nested workspaces', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-prefer-linking')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should install from registry on version not satisfied', t => {
+  await t.test('should install from registry on version not satisfied', async t => {
+    createRegistry(t, true)
     const path = resolve(__dirname, '../fixtures/workspaces-version-unsatisfied')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should link top level nested workspaces', t => {
+  await t.test('should link top level nested workspaces', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-top-level-link')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should install workspace transitive dependencies', t => {
+  await t.test('should install workspace transitive dependencies', async t => {
+    createRegistry(t, true)
     const path = resolve(__dirname, '../fixtures/workspaces-transitive-deps')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should ignore nested node_modules folders', t => {
+  await t.test('should ignore nested node_modules folders', async t => {
     // packages/a/node_modules/nested-workspaces should not be installed
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-ignore-nm')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should work with files spec', t => {
+  await t.test('should work with files spec', async t => {
+    createRegistry(t, false)
     const path = resolve(__dirname, '../fixtures/workspaces-with-files-spec')
-    return t.resolveMatchSnapshot(printIdeal(path))
+    await t.resolveMatchSnapshot(printIdeal(path))
   })
 
-  t.test('should handle conflicting peer deps ranges', t => {
+  await t.test('should handle conflicting peer deps ranges', async t => {
+    createRegistry(t, true)
     const path = resolve(__dirname, '../fixtures/workspaces-peer-ranges')
-    return t.rejects(
+    await t.rejects(
       printIdeal(path),
       {
         code: 'ERESOLVE',
@@ -833,10 +800,8 @@ t.test('workspaces', t => {
     )
   })
 
-  t.test('should allow adding a workspace as a dep to a workspace', async t => {
-    // turn off networking, this should never make a registry request
-    nock.disableNetConnect()
-    t.teardown(() => nock.enableNetConnect())
+  await t.test('should allow adding a workspace as a dep to a workspace', async t => {
+    createRegistry(t, false)
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -857,11 +822,7 @@ t.test('workspaces', t => {
       },
     })
 
-    const arb = new Arborist({
-      ...OPT,
-      path,
-      workspaces: ['workspace-a'],
-    })
+    const arb = newArb(path, { workspaces: ['workspace-a'] })
 
     const tree = arb.buildIdealTree({
       path,
@@ -877,11 +838,41 @@ t.test('workspaces', t => {
     t.matchSnapshot(printTree(await tree))
   })
 
-  t.test('workspace nodes are used instead of fetching manifests when they are valid', async t => {
-    // turn off networking, this should never make a registry request
-    nock.disableNetConnect()
-    t.teardown(() => nock.enableNetConnect())
+  await t.test('should allow cyclic peer dependencies between workspaces and packages from a repository', async t => {
+    const registry = createRegistry(t, false)
+    const packument = registry.packument({
+      name: 'foo',
+      version: '1.0.0',
+      peerDependencies: { 'workspace-a': '1.0.0' },
+    })
+    const manifest = registry.manifest({ name: 'foo', packuments: [packument] })
+    await registry.package({ manifest })
+    const path = t.testdir({
+      'package.json': JSON.stringify({
+        name: 'root',
+        dependencies: {
+          'workspace-a': '*',
+        },
+        workspaces: ['workspace-a'],
+      }),
+      'workspace-a': {
+        'package.json': JSON.stringify({
+          name: 'workspace-a',
+          version: '1.0.0',
+          dependencies: {
+            foo: '>=1.0.0',
+          },
+        }),
+      },
+    })
 
+    const arb = newArb(path, { workspaces: ['workspace-a'] })
+    const tree = await arb.buildIdealTree({ path, add: ['foo'] })
+    t.matchSnapshot(printTree(tree))
+  })
+
+  t.test('workspace nodes are used instead of fetching manifests when they are valid', async t => {
+    createRegistry(t, false)
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'root',
@@ -953,11 +944,7 @@ t.test('workspaces', t => {
       },
     })
 
-    const arb = new Arborist({
-      ...OPT,
-      path,
-      workspaces: ['workspace-a', 'workspace-b'],
-    })
+    const arb = newArb(path, { workspaces: ['workspace-a', 'workspace-b'] })
 
     // this will reject if we try to fetch a manifest for some reason
     const tree = await arb.buildIdealTree({
@@ -975,11 +962,10 @@ t.test('workspaces', t => {
     const nodeBfromA = nodeA.edgesOut.get('workspace-b').to.target
     t.equal(nodeBfromA, nodeB, 'workspace-b edgeOut from workspace-a is the workspace')
   })
-
-  t.end()
 })
 
 t.test('adding tarball to global prefix that is a symlink at a different path depth', async t => {
+  createRegistry(t, false)
   const fixt = t.testdir({
     'real-root': {},
     'another-path': {
@@ -987,11 +973,7 @@ t.test('adding tarball to global prefix that is a symlink at a different path de
     },
   })
   const path = resolve(fixt, 'another-path/global-root')
-  const arb = new Arborist({
-    path,
-    global: true,
-    ...OPT,
-  })
+  const arb = newArb(path, { global: true })
 
   const tarballpath = resolve(__dirname, '../fixtures/registry-mocks/content/mkdirp/-/mkdirp-1.0.2.tgz')
   const tree = await arb.buildIdealTree({
@@ -1006,6 +988,7 @@ t.test('adding tarball to global prefix that is a symlink at a different path de
 })
 
 t.test('add symlink that points to a symlink', t => {
+  createRegistry(t, false)
   const fixt = t.testdir({
     'global-prefix': {
       lib: {
@@ -1025,10 +1008,7 @@ t.test('add symlink that points to a symlink', t => {
     },
   })
   const path = resolve(fixt, 'my-project')
-  const arb = new Arborist({
-    path,
-    ...OPT,
-  })
+  const arb = newArb(path)
   return arb.buildIdealTree({
     add: [
       // simulates the string used by `npm link <pkg>` when
@@ -1043,7 +1023,8 @@ t.test('add symlink that points to a symlink', t => {
   )
 })
 
-t.test('update global space single dep', t => {
+t.test('update global space single dep', async t => {
+  createRegistry(t, true)
   const fixt = t.testdir({
     'global-prefix': {
       lib: {
@@ -1063,50 +1044,46 @@ t.test('update global space single dep', t => {
     path,
     global: true,
     update: true,
-    ...OPT,
   }
-  const arb = new Arborist(opts)
-  return arb.buildIdealTree(opts).then(tree =>
-    t.matchSnapshot(
-      printTree(tree),
-      'should update global dependencies'
-    )
+  const arb = newArb(path, opts)
+  const tree = await arb.buildIdealTree(opts)
+  t.matchSnapshot(
+    printTree(tree),
+    'should update global dependencies'
   )
 })
 
 // if we get this wrong, it'll spin forever and use up all the memory
 t.test('pathologically nested dependency cycle', async t => {
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(
     resolve(fixtures, 'pathological-dep-nesting-cycle')))
 })
 
-t.test('resolve file deps from cwd', t => {
+t.test('resolve file deps from cwd', async t => {
   const cwd = process.cwd()
   t.teardown(() => process.chdir(cwd))
+  createRegistry(t, false)
   const path = t.testdir({
     global: {},
     local: {},
   })
   const fixturedir = resolve(fixtures, 'root-bundler')
   process.chdir(fixturedir)
-  const arb = new Arborist({
-    global: true,
-    path: resolve(path, 'global'),
-    ...OPT,
-  })
-  return arb.buildIdealTree({
+  const arb = newArb(resolve(path, 'global'), { global: true })
+  const tree = await arb.buildIdealTree({
     path: `${path}/local`,
     add: ['child-1.2.3.tgz'],
     global: true,
-  }).then(tree => {
-    const resolved = `file:${resolve(fixturedir, 'child-1.2.3.tgz')}`
-    t.equal(normalizePath(tree.children.get('child').resolved), normalizePath(resolved))
   })
+  const resolved = `file:${resolve(fixturedir, 'child-1.2.3.tgz')}`
+  t.equal(normalizePath(tree.children.get('child').resolved), normalizePath(resolved))
 })
 
-t.test('resolve links in global mode', t => {
+t.test('resolve links in global mode', async t => {
   const cwd = process.cwd()
   t.teardown(() => process.chdir(cwd))
+  createRegistry(t, false)
   const path = t.testdir({
     global: {},
     lib: {
@@ -1122,34 +1099,31 @@ t.test('resolve links in global mode', t => {
   const fixturedir = resolve(path, 'lib', 'my-project')
   process.chdir(fixturedir)
 
-  const arb = new Arborist({
-    ...OPT,
-    global: true,
-    path: resolve(path, 'global'),
-  })
-  return arb.buildIdealTree({
+  const arb = newArb(resolve(path, 'global'), { global: true })
+  const tree = await arb.buildIdealTree({
     add: ['file:../../linked-dep'],
     global: true,
-  }).then(tree => {
-    const resolved = 'file:../../linked-dep'
-    t.equal(tree.children.get('linked-dep').resolved, resolved)
   })
+  const resolved = 'file:../../linked-dep'
+  t.equal(tree.children.get('linked-dep').resolved, resolved)
 })
 
-t.test('dont get confused if root matches duped metadep', async t => {
+t.test('do not get confused if root matches duped metadep', async t => {
+  createRegistry(t, true)
   const path = resolve(fixtures, 'test-root-matches-metadep')
-  const arb = new Arborist({ path, ...OPT })
+  const arb = newArb(path, { installStrategy: 'hoisted' })
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
 })
 
 t.test('inflate an ancient lockfile by hitting the registry', async t => {
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
+  createRegistry(t, true)
   const path = resolve(fixtures, 'sax')
-  const arb = new Arborist({ path, ...OPT })
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
-  t.strictSame(checkLogs(), [
+  t.strictSame(warnings, [
     [
       'warn',
       'ancient lockfile',
@@ -1164,12 +1138,12 @@ This is a one-time fix-up, please be patient...
 })
 
 t.test('inflating a link node in an old lockfile skips registry', async t => {
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
   const path = resolve(fixtures, 'old-lock-with-link')
-  const arb = new Arborist({ path, ...OPT, registry: 'http://invalid.host' })
+  const arb = newArb(path, { registry: 'http://invalid.host' })
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
-  t.strictSame(checkLogs(), [
+  t.strictSame(warnings, [
     [
       'warn',
       'old lockfile',
@@ -1184,12 +1158,13 @@ This is a one-time fix-up, please be patient...
 })
 
 t.test('warn for ancient lockfile, even if we use v1', async t => {
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
   const path = resolve(fixtures, 'sax')
-  const arb = new Arborist({ path, lockfileVersion: 1, ...OPT })
+  createRegistry(t, true)
+  const arb = newArb(path, { lockfileVersion: 1 })
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
-  t.strictSame(checkLogs(), [
+  t.strictSame(warnings, [
     [
       'warn',
       'ancient lockfile',
@@ -1204,21 +1179,23 @@ This is a one-time fix-up, please be patient...
 })
 
 t.test('no old lockfile warning if we write back v1', async t => {
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
   const path = resolve(fixtures, 'old-package-lock')
-  const arb = new Arborist({ path, lockfileVersion: 1, ...OPT })
+  createRegistry(t, true)
+  const arb = newArb(path, { lockfileVersion: 1 })
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
-  t.strictSame(checkLogs(), [])
+  t.strictSame(warnings, [])
 })
 
 t.test('inflate an ancient lockfile with a dep gone missing', async t => {
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
   const path = resolve(fixtures, 'ancient-lockfile-invalid')
-  const arb = new Arborist({ path, ...OPT })
+  createRegistry(t, true)
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
-  t.match(checkLogs(), [
+  t.match(warnings, [
     [
       'warn',
       'ancient lockfile',
@@ -1239,12 +1216,13 @@ This is a one-time fix-up, please be patient...
 })
 
 t.test('complete build for project with old lockfile', async t => {
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
+  createRegistry(t, false)
   const path = resolve(fixtures, 'link-dep-empty')
-  const arb = new Arborist({ path, ...OPT })
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree({ complete: true })
   t.matchSnapshot(printTree(tree))
-  t.match(checkLogs(), [
+  t.match(warnings, [
     oldLockfileWarning,
   ])
 })
@@ -1266,9 +1244,11 @@ t.test('no old lockfile warning with no package-lock', async t => {
       },
     }),
   })
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
+  const registry = createRegistry(t, false)
+  registry.audit()
   await newArb(fixt).reify()
-  t.strictSame(checkLogs(), [])
+  t.strictSame(warnings, [])
 })
 
 t.test('no old lockfile warning with a conflict package-lock', async t => {
@@ -1291,9 +1271,11 @@ t.test('no old lockfile warning with a conflict package-lock', async t => {
       resolve(fixtures, 'conflict-package-lock/package-lock.json')
     ),
   })
-  const checkLogs = warningTracker()
+  const warnings = warningTracker(t)
+  const registry = createRegistry(t, false)
+  registry.audit()
   await newArb(fixt).reify()
-  t.strictSame(checkLogs(), [])
+  t.strictSame(warnings, [])
 })
 
 t.test('override a conflict with the root dep (with force)', async t => {
@@ -1302,6 +1284,7 @@ t.test('override a conflict with the root dep (with force)', async t => {
   await t.rejects(() => buildIdeal(path), {
     code: 'ERESOLVE',
   })
+  createRegistry(t, false)
   t.matchSnapshot(await printIdeal(path, { strictPeerDeps: true, force: true }), 'strict and force override')
   t.matchSnapshot(await printIdeal(path, { strictPeerDeps: false, force: true }), 'non-strict and force override')
 })
@@ -1311,12 +1294,14 @@ t.test('override a conflict with the root peer dep (with force)', async t => {
   await t.rejects(() => buildIdeal(path, { strictPeerDeps: true }), {
     code: 'ERESOLVE',
   })
+  createRegistry(t, false)
   t.matchSnapshot(await printIdeal(path, { strictPeerDeps: true, force: true }), 'strict and force override')
   t.matchSnapshot(await printIdeal(path, { strictPeerDeps: false, force: true }), 'non-strict and force override')
 })
 
-t.test('push conflicted peer deps deeper in to the tree to solve', async t => {
+t.test('push conflicted peer deps deeper into the tree to solve', async t => {
   const path = resolve(fixtures, 'testing-peer-dep-conflict-chain/override-dep')
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path))
 })
 
@@ -1350,13 +1335,14 @@ t.test('do not continually re-resolve deps that failed to load', async t => {
       },
     }),
   })
-  const arb = new Arborist({ ...OPT, path })
-  t.rejects(() => arb.buildIdealTree({ add: [
-    '@isaacs/this-does-not-exist-actually@2.x',
-  ] }), { code: 'E404' })
+  createRegistry(t, true)
+  const arb = newArb(path)
+  await t.rejects(() => arb.buildIdealTree({
+    add: ['@isaacs/this-does-not-exist-actually@2.x'],
+  }), { code: 'E404' })
 })
 
-t.test('update a node if its bundled by the root project', async t => {
+t.test('update a node if it is bundled by the root project', async t => {
   const path = t.testdir({
     node_modules: {
       abbrev: {
@@ -1373,12 +1359,13 @@ t.test('update a node if its bundled by the root project', async t => {
       },
     }),
   })
-  const arb = new Arborist({ ...OPT, path })
+  createRegistry(t, true)
+  const arb = newArb(path)
   await arb.buildIdealTree({ update: ['abbrev'] })
   t.equal(arb.idealTree.children.get('abbrev').version, '1.1.1')
 })
 
-t.test('more peer dep conflicts', t => {
+t.test('more peer dep conflicts', async t => {
   // each of these is installed and should pass in force mode,
   // fail in strictPeerDeps mode, and pass/fail based on the
   // 'error' field in non-strict/non-forced mode.
@@ -1647,15 +1634,21 @@ t.test('more peer dep conflicts', t => {
       error: false,
       resolvable: true,
     },
+    'peerDep replacement of top level dep with different version resulting detached top level dep': {
+      pkg: {
+        description: 'a@ -> (PeerOptional(b, c, dep, dep))  b -> ( Peer(a) ) c -> ( Peer(a) )',
+        devDependencies: {
+          '@test/a': '^1.1.0',
+          '@test/b': '1.1.0',
+        },
+      },
+      error: false,
+      resolvable: true },
   })
 
-  if (process.platform !== 'win32') {
-    t.jobs = cases.length
-  }
-  t.plan(cases.length)
-
+  createRegistry(t, true)
   for (const [name, { pkg, error, resolvable, add }] of cases) {
-    t.test(name, { buffer: true }, async t => {
+    await t.test(name, { buffer: true }, async t => {
       const path = t.testdir({
         'package.json': JSON.stringify(pkg),
       })
@@ -1668,9 +1661,9 @@ t.test('more peer dep conflicts', t => {
         error: () => {},
         warn: (...msg) => warnings.push(normalizePaths(msg)),
       }
-      const strict = new Arborist({ ...OPT, path, strictPeerDeps: true })
-      const force = new Arborist({ ...OPT, path, force: true })
-      const def = new Arborist({ ...OPT, path, log })
+      const strict = newArb(path, { strictPeerDeps: true })
+      const force = newArb(path, { force: true })
+      const def = newArb(path, { log })
 
       // cannot do this in parallel on Windows machines, or it
       // crashes in CI with an EBUSY error when it tries to read
@@ -1724,14 +1717,14 @@ t.test('more peer dep conflicts', t => {
   }
 })
 
-t.test('cases requiring peer sets to be nested', t => {
+t.test('cases requiring peer sets to be nested', async t => {
   const cases = [
     'multi',
     'simple',
   ]
-  t.plan(cases.length)
   for (const c of cases) {
-    t.test(c, async t => {
+    await t.test(c, async t => {
+      createRegistry(t, true)
       const path = resolve(`${fixtures}/testing-peer-dep-nesting/${c}`)
       t.matchSnapshot(await printIdeal(path))
     })
@@ -1743,13 +1736,13 @@ t.test('make sure yargs works', async t => {
   // tests faster and force us to fully understand a problem, yargs has
   // been a bountiful source of complicated eslint peerDep issues.
   const yargs = resolve(fixtures, 'yargs')
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(yargs), 'yargs should build fine')
 })
 
-t.test('allow updating when peer outside of explicit update set', t => {
+t.test('allow updating when peer outside of explicit update set', async t => {
   // see https://github.com/npm/cli/issues/2000
-  t.plan(2)
-  t.test('valid, no force required', async t => {
+  await t.test('valid, no force required', async t => {
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'x',
@@ -1885,6 +1878,7 @@ t.test('allow updating when peer outside of explicit update set', t => {
         },
       }),
     })
+    createRegistry(t, true)
     t.matchSnapshot(await printIdeal(path, {
       add: [
         '@isaacs/testing-peer-dep-conflict-chain-single-a@2',
@@ -1893,7 +1887,7 @@ t.test('allow updating when peer outside of explicit update set', t => {
     }))
   })
 
-  t.test('conflict, but resolves appropriately with --force', async t => {
+  await t.test('conflict, but resolves appropriately with --force', async t => {
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'x',
@@ -2028,6 +2022,7 @@ t.test('allow updating when peer outside of explicit update set', t => {
         },
       }),
     })
+    createRegistry(t, true)
     t.matchSnapshot(await printIdeal(path, {
       force: true,
       add: [
@@ -2046,6 +2041,7 @@ t.test('allow updating when peer outside of explicit update set', t => {
 
 t.test('carbonium eslint conflicts', async t => {
   const path = resolve(fixtures, 'carbonium')
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path, {
     add: [
       '@typescript-eslint/eslint-plugin@4',
@@ -2056,7 +2052,8 @@ t.test('carbonium eslint conflicts', async t => {
 
 t.test('peerOptionals that are devDeps or explicit request', async t => {
   const path = resolve(fixtures, 'peer-optional-installs')
-  const arb = new Arborist({ path, ...OPT })
+  createRegistry(t, true)
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree({ add: ['abbrev'] })
   t.matchSnapshot(printTree(tree), 'should install the abbrev dep')
   t.ok(tree.children.get('abbrev'), 'should install abbrev dep')
@@ -2084,7 +2081,8 @@ t.test('weird thing when theres a link to ..', async t => {
       }),
     },
   }) + '/y'
-  const arb = new Arborist({ path, ...OPT })
+  createRegistry(t, false)
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree()
   t.equal(tree.children.get('x').target.fsParent, null)
 })
@@ -2101,6 +2099,7 @@ t.test('always prefer deduping peer deps', async t => {
       },
     }),
   })
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path))
 })
 
@@ -2118,7 +2117,8 @@ t.test('do not ever nest peer deps underneath their dependent ever', async t => 
       },
     }),
   })
-  t.rejects(printIdeal(path), { code: 'ERESOLVE' })
+  createRegistry(t, true)
+  await t.rejects(printIdeal(path), { code: 'ERESOLVE' })
 })
 
 t.test('properly fail on conflicted peerOptionals', async t => {
@@ -2134,12 +2134,14 @@ t.test('properly fail on conflicted peerOptionals', async t => {
       },
     }),
   })
+  createRegistry(t, true)
   await t.rejects(printIdeal(path), { code: 'ERESOLVE' })
 })
 
 t.test('properly assign fsParent when paths have .. in them', async t => {
   const path = resolve(fixtures, 'fs-parent-dots/x/y/z')
-  const arb = new Arborist({ ...OPT, path })
+  createRegistry(t, false)
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree()
   t.matchSnapshot(printTree(tree))
   for (const child of tree.children.values()) {
@@ -2212,6 +2214,7 @@ t.test('update global', async t => {
     },
   })
 
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path, { global: true, update: ['abbrev'] }),
     'updating missing dep should have no effect, but fix the invalid node')
 
@@ -2226,7 +2229,7 @@ t.test('update global', async t => {
     'once@2',
   ]
   for (const updateName of invalidArgs) {
-    t.rejects(
+    await t.rejects(
       printIdeal(path, { global: true, update: [updateName] }),
       { code: 'EUPDATEARGS' },
       'should throw an error when using semver ranges'
@@ -2246,11 +2249,50 @@ t.test('update global when nothing in global', async t => {
       node_modules: {},
     },
   })
+  createRegistry(t, false)
   const opts = { global: true, update: true }
   t.matchSnapshot(await printIdeal(path + '/no_nm', opts),
     'update without node_modules')
   t.matchSnapshot(await printIdeal(path + '/empty_nm', opts),
     'update with empty node_modules')
+})
+
+t.test('update global ignores hidden node_modules entries', async t => {
+  const path = t.testdir({
+    node_modules: {
+      '.hidden-non-package': {
+        node_modules: {},
+      },
+      '@scope': {
+        '.retired-package': {
+          node_modules: {},
+        },
+      },
+      once: {
+        'package.json': JSON.stringify({
+          name: 'once',
+          version: '1.3.1',
+          dependencies: {
+            wrappy: '1',
+          },
+        }),
+        node_modules: {
+          wrappy: {
+            'package.json': JSON.stringify({
+              name: 'wrappy',
+              version: '1.0.1',
+            }),
+          },
+        },
+      },
+    },
+  })
+  createRegistry(t, true)
+  const tree = await buildIdeal(path, { global: true, update: true })
+  const deps = tree.target.package.dependencies
+  t.notOk(deps['.hidden-non-package'], 'hidden entries are not queued for global update')
+  t.notOk(deps['@scope/.retired-package'], 'retired scoped entries are not queued for global update')
+  t.equal(deps.once, '*', 'visible global packages are queued for global update')
 })
 
 t.test('peer dep that needs to be replaced', async t => {
@@ -2266,6 +2308,7 @@ t.test('peer dep that needs to be replaced', async t => {
       },
     }),
   })
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path))
 })
 
@@ -2280,11 +2323,10 @@ t.test('transitive conflicted peer dependency', async t => {
       },
     }),
   })
-  const strict = { strictPeerDeps: true }
-  const force = { force: true }
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path))
-  t.matchSnapshot(await printIdeal(path, force))
-  await t.rejects(printIdeal(path, strict), { code: 'ERESOLVE' })
+  t.matchSnapshot(await printIdeal(path, { force: true }))
+  await t.rejects(printIdeal(path, { strictPeerDeps: true }), { code: 'ERESOLVE' })
 })
 
 t.test('remove deps when initializing tree from actual tree', async t => {
@@ -2299,26 +2341,102 @@ t.test('remove deps when initializing tree from actual tree', async t => {
     },
   })
 
-  const arb = new Arborist({ path, ...OPT })
+  createRegistry(t, false)
+  const arb = newArb(path)
   const tree = await arb.buildIdealTree({ rm: ['foo'] })
   t.equal(tree.children.get('foo'), undefined, 'removed foo child')
 })
 
-t.test('detect conflicts in transitive peerOptional deps', t => {
-  t.plan(2)
-  const base = resolve(fixtures, 'test-conflicted-optional-peer-dep')
-
-  t.test('nest when peerOptional conflicts', async t => {
-    const path = resolve(base, 'nest-peer-optional')
-    const tree = await buildIdeal(path)
-    t.matchSnapshot(printTree(tree))
-    const name = '@isaacs/test-conflicted-optional-peer-dep-peer'
-    const peers = tree.inventory.query('name', name)
-    t.equal(peers.size, 2, 'installed the peer dep twice to avoid conflict')
+t.test('remove deps with a version spec', async t => {
+  const path = t.testdir({
+    node_modules: {
+      foo: {
+        'package.json': JSON.stringify({
+          name: 'foo',
+          version: '1.2.3',
+        }),
+      },
+    },
   })
 
-  t.test('omit peerOptionals when not needed for conflicts', async t => {
+  createRegistry(t, false)
+  const invalidArgs = [
+    'foo@1.2.3',
+    'foo@next',
+    'foo@^1.0.0',
+    'foo@>=2.0.0',
+    'foo@2',
+  ]
+  for (const rmName of invalidArgs) {
+    await t.rejects(
+      buildIdeal(path, { rm: [rmName] }),
+      { code: 'ERMARGS', message: /npm rm foo/ },
+      'should throw an error when the package name has a version'
+    )
+  }
+
+  await t.rejects(
+    buildIdeal(path, { rm: ['@scope/foo@1.2.3'] }),
+    { code: 'ERMARGS', message: /npm rm @scope\/foo/ },
+    'should throw an error when a scoped package name has a version'
+  )
+
+  await t.rejects(
+    buildIdeal(path, { rm: ['./foo'] }),
+    { code: 'ERMARGS', message: /npm rm <pkg>/ },
+    'should throw an error when the package is a path'
+  )
+})
+
+t.test('detect conflicts in transitive peerOptional deps', async t => {
+  const base = resolve(fixtures, 'test-conflicted-optional-peer-dep')
+
+  await t.test('nest when peerOptional conflicts', async t => {
+    const path = resolve(base, 'nest-peer-optional')
+    createRegistry(t, true)
+    const tree = await buildIdeal(path)
+    t.matchSnapshot(printTree(tree))
+    const peerName = '@isaacs/test-conflicted-optional-peer-dep-peer'
+    const requiredHostName = '@isaacs/test-conflicted-optional-peer-dep-has-peer'
+    const optionalHostName = '@isaacs/test-conflicted-optional-peer-dep-has-peer-optional'
+    const optionalMetaName = '@isaacs/test-conflicted-optional-peer-dep-meta-peer-optional'
+
+    const peers = tree.inventory.query('name', peerName)
+    t.equal(peers.size, 2, 'installed the peer dep twice to avoid conflict')
+
+    const rootPeer = tree.children.get(peerName)
+    const requiredHost = tree.children.get(requiredHostName)
+    const optionalMeta = tree.children.get(optionalMetaName)
+    const optionalHost = optionalMeta?.children.get(optionalHostName)
+    const nestedPeer = optionalMeta?.children.get(peerName)
+
+    t.equal(rootPeer?.version, '1.0.0', 'required peer retains the root slot')
+    t.equal(
+      requiredHost?.edgesOut.get(peerName)?.to,
+      rootPeer,
+      'required peer edge resolves to the root provider'
+    )
+
+    t.notOk(
+      tree.children.get(optionalHostName),
+      'optional peer dependent is not hoisted to the root'
+    )
+    t.ok(optionalHost, 'optional peer dependent is nested under its branch')
+    t.equal(
+      nestedPeer?.version,
+      '2.0.0',
+      'compatible optional peer is nested with its dependent'
+    )
+    t.equal(
+      optionalHost?.edgesOut.get(peerName)?.to,
+      nestedPeer,
+      'optional peer edge resolves to its nested provider'
+    )
+  })
+
+  await t.test('omit peerOptionals when not needed for conflicts', async t => {
     const path = resolve(base, 'omit-peer-optional')
+    createRegistry(t, true)
     const tree = await buildIdeal(path)
     t.matchSnapshot(printTree(tree))
     const name = '@isaacs/test-conflicted-optional-peer-dep-peer'
@@ -2329,6 +2447,7 @@ t.test('detect conflicts in transitive peerOptional deps', t => {
 
 t.test('do not fail if root peerDep looser than meta peerDep', async t => {
   const path = resolve(fixtures, 'test-peer-looser-than-dev')
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path))
 })
 
@@ -2348,6 +2467,7 @@ t.test('adding existing dep with updateable version in package.json', async t =>
     }),
   })
 
+  createRegistry(t, true)
   t.matchSnapshot(await printIdeal(path, { add: ['lodash'] }))
 })
 
@@ -2365,8 +2485,9 @@ t.test('set the current on ERESOLVE triggered by devDeps', async t => {
     }),
   })
 
-  const arb = new Arborist({ path, ...OPT })
-  t.rejects(arb.buildIdealTree(), {
+  createRegistry(t, true)
+  const arb = newArb(path)
+  await t.rejects(arb.buildIdealTree(), {
     code: 'ERESOLVE',
     current: {
       name: 'eslint',
@@ -2381,62 +2502,14 @@ t.test('set the current on ERESOLVE triggered by devDeps', async t => {
   })
 })
 
-t.test('shrinkwrapped dev/optional deps should not clobber flags', t => {
-  t.test('optional', async t => {
-    const path = t.testdir({
-      'package.json': JSON.stringify({
-        name: 'project',
-        version: '1.2.3',
-        optionalDependencies: {
-          '@isaacs/test-package-with-shrinkwrap': '^1.0.0',
-        },
-      }),
-    })
-    const tree = await buildIdeal(path, { complete: true })
-    const swName = '@isaacs/test-package-with-shrinkwrap'
-    const swDep = tree.children.get(swName)
-    const metaDep = swDep.children.get('abbrev')
-    t.equal(swDep.optional, true, 'shrinkwrapped dep is optional')
-    t.equal(metaDep.optional, true, 'shrinkwrapped metadep optional')
-
-    // make sure we're not just somehow leaving ALL flags true
-    t.equal(swDep.dev, false, 'sw dep is not dev')
-    t.equal(metaDep.dev, false, 'meta dep is not dev')
-  })
-
-  t.test('dev', async t => {
-    const path = t.testdir({
-      'package.json': JSON.stringify({
-        name: 'project',
-        version: '1.2.3',
-        devDependencies: {
-          '@isaacs/test-package-with-shrinkwrap': '^1.0.0',
-        },
-      }),
-    })
-    const tree = await buildIdeal(path, { complete: true })
-    const swName = '@isaacs/test-package-with-shrinkwrap'
-    const swDep = tree.children.get(swName)
-    const metaDep = swDep.children.get('abbrev')
-    t.equal(swDep.dev, true, 'shrinkwrapped dep is dev')
-    t.equal(metaDep.dev, true, 'shrinkwrapped metadep dev')
-
-    // make sure we're not just somehow leaving ALL flags true
-    t.equal(swDep.optional, false, 'sw dep is not optional')
-    t.equal(metaDep.optional, false, 'meta dep is not optional')
-  })
-
-  t.end()
-})
-
-t.test('do not ERESOLVE on peerOptionals that are ignored anyway', t => {
+t.test('do not ERESOLVE on peerOptionals that are ignored anyway', async t => {
   // this simulates three cases where a conflict occurs during the peerSet
   // generation phase, but will not manifest in the tree building phase.
   const base = resolve(fixtures, 'peer-optional-eresolve')
   const cases = ['a', 'b', 'c', 'd', 'e', 'f']
-  t.plan(cases.length)
   for (const c of cases) {
-    t.test(`case ${c}`, async t => {
+    await t.test(`case ${c}`, async t => {
+      createRegistry(t, true)
       const path = resolve(base, c)
       t.matchSnapshot(await printIdeal(path))
     })
@@ -2453,8 +2526,7 @@ t.test('allow ERESOLVE to be forced when not in the source', async t => {
 
   // in these tests, the deps are both of the same type.  b has a peerOptional
   // dep on peer, and peer is a direct dependency of the root.
-  t.test('both direct and peer of the same type', t => {
-    t.plan(types.length)
+  await t.test('both direct and peer of the same type', async t => {
     const pj = type => ({
       name: '@isaacs/conflicted-peer-optional-from-dev-dep',
       version: '1.2.3',
@@ -2465,10 +2537,11 @@ t.test('allow ERESOLVE to be forced when not in the source', async t => {
     })
 
     for (const type of types) {
-      t.test(type, async t => {
+      await t.test(type, async t => {
         const path = t.testdir({
           'package.json': JSON.stringify(pj(type)),
         })
+        createRegistry(t, true)
         t.matchSnapshot(await printIdeal(path, { force: true }), 'use the force')
         t.rejects(printIdeal(path), { code: 'ERESOLVE' }, 'no force')
       })
@@ -2476,7 +2549,7 @@ t.test('allow ERESOLVE to be forced when not in the source', async t => {
   })
 
   // in these, the peer is a peer dep of the root, and b is a different type
-  t.test('peer is peer, b is some other type', t => {
+  await t.test('peer is peer, b is some other type', async t => {
     t.plan(types.length - 1)
     const pj = type => ({
       name: '@isaacs/conflicted-peer-optional-from-dev-dep',
@@ -2492,10 +2565,11 @@ t.test('allow ERESOLVE to be forced when not in the source', async t => {
       if (type === 'peerDependencies') {
         continue
       }
-      t.test(type, async t => {
+      await t.test(type, async t => {
         const path = t.testdir({
           'package.json': JSON.stringify(pj(type)),
         })
+        createRegistry(t, true)
         t.matchSnapshot(await printIdeal(path, { force: true }), 'use the force')
         t.rejects(printIdeal(path), { code: 'ERESOLVE' }, 'no force')
       })
@@ -2503,8 +2577,7 @@ t.test('allow ERESOLVE to be forced when not in the source', async t => {
   })
 
   // in these, b is a peer dep, and peer is some other type
-  t.test('peer is peer, b is some other type', t => {
-    t.plan(types.length - 1)
+  await t.test('peer is peer, b is some other type', async t => {
     const pj = type => ({
       name: '@isaacs/conflicted-peer-optional-from-dev-dep',
       version: '1.2.3',
@@ -2519,17 +2592,16 @@ t.test('allow ERESOLVE to be forced when not in the source', async t => {
       if (type === 'peerDependencies') {
         continue
       }
-      t.test(type, async t => {
+      await t.test(type, async t => {
         const path = t.testdir({
           'package.json': JSON.stringify(pj(type)),
         })
+        createRegistry(t, true)
         t.matchSnapshot(await printIdeal(path, { force: true }), 'use the force')
         t.rejects(printIdeal(path), { code: 'ERESOLVE' }, 'no force')
       })
     }
   })
-
-  t.end()
 })
 
 t.test('allow a link dep to satisfy a peer dep', async t => {
@@ -2555,6 +2627,7 @@ t.test('allow a link dep to satisfy a peer dep', async t => {
     },
   })
 
+  createRegistry(t, true)
   const add = ['@isaacs/testing-peer-dep-conflict-chain-vv@2']
 
   // avoids if the link dep is unmet
@@ -2636,22 +2709,24 @@ t.test('replace a link with a matching link when the current one is wrong', asyn
       },
     }),
   })
+  createRegistry(t, false)
   t.matchSnapshot(await printIdeal(path, {
     workspaces: null, // also test that a null workspaces is ignored.
   }), 'replace incorrect with correct')
 })
 
-t.test('cannot do workspaces in global mode', t => {
+t.test('cannot do workspaces in global mode', async t => {
+  createRegistry(t, false)
   t.throws(() => printIdeal(t.testdir(), {
     workspaces: ['a', 'b', 'c'],
     global: true,
   }), { message: 'Cannot operate on workspaces in global mode' })
-  t.end()
 })
 
 t.test('add packages to workspaces, not root', async t => {
   const path = resolve(__dirname, '../fixtures/workspaces-not-root')
 
+  createRegistry(t, true)
   const addTree = await buildIdeal(path, {
     add: ['wrappy@1.0.1'],
     workspaces: ['a', 'c'],
@@ -2674,6 +2749,20 @@ t.test('add packages to workspaces, not root', async t => {
   t.equal(rmTree.children.get('b').target.edgesOut.get('abbrev'), undefined)
   t.match(rmTree.children.get('c').target.edgesOut.get('abbrev'), { spec: '' })
   t.matchSnapshot(printTree(rmTree), 'tree with abbrev removed from a and b')
+})
+
+t.test('add one workspace to another', async t => {
+  const path = resolve(__dirname, '../fixtures/workspaces-not-root')
+  const packageA = resolve(path, 'packages/a')
+
+  createRegistry(t, false)
+  const addTree = await buildIdeal(path, {
+    add: [packageA],
+    workspaces: ['c'],
+  })
+  const c = addTree.children.get('c').target
+  t.match(c.edgesOut.get('a'), { spec: 'file:../a' })
+  t.matchSnapshot(printTree(addTree), 'tree with workspace a added to workspace c')
 })
 
 t.test('workspace error handling', async t => {
@@ -2712,23 +2801,25 @@ t.test('workspace error handling', async t => {
       },
     },
   })
-  t.test('set filter, but no workspaces present', async t => {
-    const logs = warningTracker()
+  await t.test('set filter, but no workspaces present', async t => {
+    const warnings = warningTracker(t)
+    createRegistry(t, false)
     await buildIdeal(resolve(path, 'packages/a'), {
       workspaces: ['a'],
     })
-    t.strictSame(logs(), [[
+    t.strictSame(warnings, [[
       'warn',
       'workspaces',
       'filter set, but no workspaces present',
     ]], 'got warning')
   })
-  t.test('set filter for workspace that is not present', async t => {
-    const logs = warningTracker()
+  await t.test('set filter for workspace that is not present', async t => {
+    const warnings = warningTracker(t)
+    createRegistry(t, true)
     await buildIdeal(path, {
       workspaces: ['not-here'],
     })
-    t.strictSame(logs(), [[
+    t.strictSame(warnings, [[
       'warn',
       'workspaces',
       'not-here in filter set, but not in workspaces',
@@ -2750,6 +2841,7 @@ t.test('avoid dedupe when a dep is bundled', async t => {
     }),
   })
 
+  createRegistry(t, true)
   // do our install, prior to the publishing of b@2.1.0
   const startTree = await buildIdeal(path, {
     // date between publish times of b@2.0.0 and b@2.1.0
@@ -2763,7 +2855,7 @@ t.test('avoid dedupe when a dep is bundled', async t => {
   //     +-- b@2.0
   await startTree.meta.save()
   let b200
-  t.test('initial tree state', t => {
+  await t.test('initial tree state', async t => {
     const a = startTree.children.get('@isaacs/testing-bundle-dupes-a')
     const b = startTree.children.get('@isaacs/testing-bundle-dupes-b')
     const bNested = a.children.get('@isaacs/testing-bundle-dupes-b')
@@ -2772,21 +2864,19 @@ t.test('avoid dedupe when a dep is bundled', async t => {
     t.equal(bNested.version, '2.0.0')
     // save this to synthetically create the dupe later, so we can fix it
     b200 = bNested
-    t.end()
   })
 
   // Now ensure that adding b@2 will install b@2.1.0 AND
   // dedupe the nested b@2.0.0 dep.
   const add = ['@isaacs/testing-bundle-dupes-b@2']
   const newTree = await buildIdeal(path, { add })
-  t.test('did not create dupe', t => {
+  await t.test('did not create dupe', async t => {
     const a = newTree.children.get('@isaacs/testing-bundle-dupes-a')
     const b = newTree.children.get('@isaacs/testing-bundle-dupes-b')
     const bNested = a.children.get('@isaacs/testing-bundle-dupes-b')
     t.equal(b.version, '2.1.0')
     t.equal(a.version, '2.0.0')
     t.notOk(bNested, 'should not have a nested b')
-    t.end()
   })
 
   // now, synthetically create the bug we just verified no longer happens,
@@ -2805,7 +2895,7 @@ t.test('avoid dedupe when a dep is bundled', async t => {
   }))
 
   // gut check that we have reproduced the error condition
-  t.test('gut check that dupe synthetically created', t => {
+  await t.test('gut check that dupe synthetically created', async t => {
     const a = newTree.children.get('@isaacs/testing-bundle-dupes-a')
     const b = newTree.children.get('@isaacs/testing-bundle-dupes-b')
     const bNested = a.children.get('@isaacs/testing-bundle-dupes-b')
@@ -2826,24 +2916,24 @@ t.test('avoid dedupe when a dep is bundled', async t => {
     t.notOk(bNested, 'should not have a nested b')
   }
 
-  t.test('dedupe to remove dupe', async t => {
+  await t.test('dedupe to remove dupe', async t => {
     check(t, await buildIdeal(path, {
       update: ['@isaacs/testing-bundle-dupes-b'],
       preferDedupe: true,
     }))
   })
 
-  t.test('update b to remove dupe', async t => {
+  await t.test('update b to remove dupe', async t => {
     check(t, await buildIdeal(path, {
       update: ['@isaacs/testing-bundle-dupes-b'],
     }))
   })
 
-  t.test('update all to remove dupe', async t => {
+  await t.test('update all to remove dupe', async t => {
     check(t, await buildIdeal(path, { update: true }))
   })
 
-  t.test('reinstall a to remove dupe', async t => {
+  await t.test('reinstall a to remove dupe', async t => {
     check(t, await buildIdeal(path, {
       add: ['@isaacs/testing-bundle-dupes-a@2'],
     }))
@@ -2857,6 +2947,69 @@ t.test('avoid dedupe when a dep is bundled', async t => {
   })
 })
 
+t.test('min-release-age-exclude exempts matched packages from the before filter', async t => {
+  // The dupes-b fixture publishes 2.0.0 at 16:23:59 and 2.1.0 at 16:25:15.
+  // A `before` of 16:24:00 normally filters 2.1.0 out, leaving 2.0.0.
+  const before = new Date('2021-04-23T16:24:00Z')
+  const pkg = '@isaacs/testing-bundle-dupes-b'
+  const mkPath = () => t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: { [pkg]: '2' },
+    }),
+  })
+
+  await t.test('without exclude, before filters to the older version', async t => {
+    createRegistry(t, true)
+    const tree = await buildIdeal(mkPath(), { before })
+    t.equal(tree.children.get(pkg).version, '2.0.0', 'before filter applied')
+  })
+
+  await t.test('exact name in exclude bypasses the before filter', async t => {
+    createRegistry(t, true)
+    const tree = await buildIdeal(mkPath(), {
+      before,
+      minReleaseAgeExclude: [pkg],
+    })
+    t.equal(tree.children.get(pkg).version, '2.1.0', 'newest version installed')
+  })
+
+  await t.test('glob pattern in exclude bypasses the before filter', async t => {
+    createRegistry(t, true)
+    const tree = await buildIdeal(mkPath(), {
+      before,
+      minReleaseAgeExclude: ['@isaacs/*'],
+    })
+    t.equal(tree.children.get(pkg).version, '2.1.0', 'newest version installed')
+  })
+
+  await t.test('non-matching exclude leaves the before filter in place', async t => {
+    createRegistry(t, true)
+    const tree = await buildIdeal(mkPath(), {
+      before,
+      minReleaseAgeExclude: ['some-other-pkg', '@other/*'],
+    })
+    t.equal(tree.children.get(pkg).version, '2.0.0', 'before filter still applied')
+  })
+
+  await t.test('an npm: alias key cannot bypass the filter for its target', async t => {
+    // The exclude must match the resolved registry identity, not the alias key.
+    // Here the alias key `dupes` matches the exclude but the fetched package
+    // `pkg` does not, so the before filter must still apply.
+    createRegistry(t, true)
+    const aliasPath = t.testdir({
+      'package.json': JSON.stringify({
+        dependencies: { dupes: `npm:${pkg}@2` },
+      }),
+    })
+    const tree = await buildIdeal(aliasPath, {
+      before,
+      minReleaseAgeExclude: ['dupes'],
+    })
+    t.equal(tree.children.get('dupes').version, '2.0.0',
+      'before filter still applied to the aliased package')
+  })
+})
+
 t.test('upgrade a partly overlapping peer set', async t => {
   const path = t.testdir({
     'package.json': JSON.stringify({
@@ -2866,6 +3019,7 @@ t.test('upgrade a partly overlapping peer set', async t => {
       },
     }),
   })
+  createRegistry(t, true)
   const tree = await buildIdeal(path)
   await tree.meta.save()
   t.matchSnapshot(await printIdeal(path, {
@@ -2883,9 +3037,10 @@ t.test('fail to upgrade a partly overlapping peer set', async t => {
       },
     }),
   })
+  createRegistry(t, true)
   const tree = await buildIdeal(path)
   await tree.meta.save()
-  t.rejects(printIdeal(path, {
+  await t.rejects(printIdeal(path, {
     add: ['@isaacs/testing-peer-dep-conflict-chain-y@3'],
   }), { code: 'ERESOLVE' }, 'should not be able to upgrade dep')
 })
@@ -2922,6 +3077,7 @@ t.test('add deps to workspaces', async t => {
   const path = t.testdir(fixtureDef)
 
   t.test('no args', async t => {
+    createRegistry(t, true)
     const tree = await buildIdeal(path)
     t.equal(tree.children.get('mkdirp').version, '1.0.4')
     t.equal(tree.children.get('a').target.children.get('mkdirp').version, '0.5.5')
@@ -2930,6 +3086,7 @@ t.test('add deps to workspaces', async t => {
   })
 
   t.test('add mkdirp 0.5.0 to b', async t => {
+    createRegistry(t, true)
     const tree = await buildIdeal(path, { workspaces: ['b'], add: ['mkdirp@0.5.0'] })
     t.equal(tree.children.get('mkdirp').version, '1.0.4')
     t.equal(tree.children.get('a').target.children.get('mkdirp').version, '0.5.5')
@@ -2938,6 +3095,7 @@ t.test('add deps to workspaces', async t => {
   })
 
   t.test('remove mkdirp from a', async t => {
+    createRegistry(t, true)
     const tree = await buildIdeal(path, { workspaces: ['a'], rm: ['mkdirp'] })
     t.equal(tree.children.get('mkdirp').version, '1.0.4')
     t.equal(tree.children.get('a').target.children.get('mkdirp'), undefined)
@@ -2946,6 +3104,7 @@ t.test('add deps to workspaces', async t => {
   })
 
   t.test('upgrade mkdirp in a, dedupe on root', async t => {
+    createRegistry(t, true)
     const tree = await buildIdeal(path, { workspaces: ['a'], add: ['mkdirp@1'] })
     t.equal(tree.children.get('mkdirp').version, '1.0.4')
     t.equal(tree.children.get('a').target.children.get('mkdirp'), undefined)
@@ -2956,6 +3115,8 @@ t.test('add deps to workspaces', async t => {
 
   t.test('KEEP in the root, prune out unnecessary dupe', async t => {
     const path = t.testdir(fixtureDef)
+    const registry = createRegistry(t, true)
+    registry.audit()
     const arb = newArb(path)
     // reify first so that the other mkdirp is present in the tree
     await arb.reify()
@@ -3000,6 +3161,7 @@ t.test('add deps and include workspace-root', async t => {
   const path = t.testdir(fixtureDef)
 
   t.test('no args', async t => {
+    createRegistry(t, true)
     const tree = await buildIdeal(path)
     t.equal(tree.children.get('mkdirp').version, '1.0.4')
     t.equal(tree.children.get('a').target.children.get('mkdirp').version, '0.5.5')
@@ -3009,6 +3171,7 @@ t.test('add deps and include workspace-root', async t => {
   })
 
   t.test('add mkdirp 0.5.0 to b', async t => {
+    createRegistry(t, true)
     const tree = await buildIdeal(path, { workspaces: ['b'], add: ['mkdirp@0.5.0'], includeWorkspaceRoot: true })
     t.equal(tree.children.get('mkdirp').version, '0.5.0')
     t.ok(tree.edgesOut.has('mkdirp'))
@@ -3046,6 +3209,7 @@ t.test('inflates old lockfile with hasInstallScript', async t => {
       },
     },
   })
+  createRegistry(t, true)
 
   const tree = await buildIdeal(path, {
     add: ['esbuild@0.11.10'],
@@ -3072,25 +3236,25 @@ t.test('update a global space that contains a link', async t => {
       once: t.fixture('symlink', '../target'),
     },
   })
+  createRegistry(t, true)
   const tree = await buildIdeal(path, { update: true, global: true })
   t.matchSnapshot(printTree(tree))
   t.equal(tree.children.get('once').isLink, true)
 })
 
-t.test('peer conflicts between peer sets in transitive deps', t => {
-  t.plan(4)
-
+t.test('peer conflicts between peer sets in transitive deps', async t => {
   // caused an infinite loop in https://github.com/npm/arborist/issues/325,
   // which is the reason for the package name.
-  t.test('y and j@2 at root, x and j@1 underneath a', async t => {
+  await t.test('y and j@2 at root, x and j@1 underneath a', async t => {
     const path = t.testdir({
       'package.json': '{}',
     })
-    const warnings = warningTracker()
+    createRegistry(t, true)
+    const warnings = warningTracker(t)
     const tree = await buildIdeal(path, {
       add: ['@isaacs/peer-dep-conflict-infinite-loop-a@1'],
     })
-    t.strictSame(warnings(), [])
+    t.strictSame(warnings, [])
     const a = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-a')
     const j = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-j')
     const x = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-x')
@@ -3107,15 +3271,16 @@ t.test('peer conflicts between peer sets in transitive deps', t => {
     t.notOk(ay)
   })
 
-  t.test('x and j@1 at root, y and j@2 underneath a', async t => {
+  await t.test('x and j@1 at root, y and j@2 underneath a', async t => {
     const path = t.testdir({
       'package.json': '{}',
     })
-    const warnings = warningTracker()
+    createRegistry(t, true)
+    const warnings = warningTracker(t)
     const tree = await buildIdeal(path, {
       add: ['@isaacs/peer-dep-conflict-infinite-loop-a@2'],
     })
-    t.strictSame(warnings(), [])
+    t.strictSame(warnings, [])
     const a = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-a')
     const j = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-j')
     const x = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-x')
@@ -3132,15 +3297,16 @@ t.test('peer conflicts between peer sets in transitive deps', t => {
     t.notOk(ax)
   })
 
-  t.test('get warning, x and j@1 in root, put y and j@3 in a', async t => {
+  await t.test('get warning, x and j@1 in root, put y and j@3 in a', async t => {
     const path = t.testdir({
       'package.json': '{}',
     })
-    const warnings = warningTracker()
+    createRegistry(t, true)
+    const warnings = warningTracker(t)
     const tree = await buildIdeal(path, {
       add: ['@isaacs/peer-dep-conflict-infinite-loop-a@3'],
     })
-    const w = warnings()
+    const w = warnings
     t.match(w, [['warn', 'ERESOLVE', 'overriding peer dependency', {
       code: 'ERESOLVE',
     }]], 'warning is an ERESOLVE')
@@ -3162,15 +3328,16 @@ t.test('peer conflicts between peer sets in transitive deps', t => {
     t.notOk(ax)
   })
 
-  t.test('x and j@1 at root, y and j@2 underneath a (no a->j dep)', async t => {
+  await t.test('x and j@1 at root, y and j@2 underneath a (no a->j dep)', async t => {
     const path = t.testdir({
       'package.json': '{}',
     })
-    const warnings = warningTracker()
+    const warnings = warningTracker(t)
+    createRegistry(t, true)
     const tree = await buildIdeal(path, {
       add: ['@isaacs/peer-dep-conflict-infinite-loop-a@4'],
     })
-    t.strictSame(warnings(), [], 'no warnings')
+    t.strictSame(warnings, [], 'no warnings')
 
     const a = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-a')
     const j = tree.children.get('@isaacs/peer-dep-conflict-infinite-loop-j')
@@ -3187,14 +3354,11 @@ t.test('peer conflicts between peer sets in transitive deps', t => {
     t.equal(aj.version, '2.0.0')
     t.notOk(ax)
   })
-
-  t.end()
 })
 
-t.test('competing peerSets resolve in both root and workspace', t => {
+t.test('competing peerSets resolve in both root and workspace', async t => {
   // The following trees caused an infinite loop in a workspace
   // https://github.com/npm/cli/issues/3933
-  t.plan(2)
 
   const rootAndWs = async dependencies => {
     const fixt = t.testdir({
@@ -3226,7 +3390,7 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     ]
   }
 
-  t.test('overlapping peerSets dont warn', async t => {
+  await t.test('overlapping peerSets do not warn', async t => {
     // This should not cause a warning because replacing `c@2` and `d@2`
     // with `c@1` and `d@1` is still valid.
     //
@@ -3239,7 +3403,8 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     // d@2 -> PEER(c@2)
     // ```
 
-    const warnings = warningTracker()
+    createRegistry(t, true)
+    const warnings = warningTracker(t)
     const [rootTree, wsTree] = await rootAndWs({
       '@lukekarrys/workspace-peer-dep-infinite-loop-a': '1',
     })
@@ -3263,9 +3428,9 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     t.equal(wsC.version, '1.0.0', 'workspace c version')
     t.equal(wsD.version, '1.0.0', 'workspace d version')
 
-    const [rootWarnings = [], wsWarnings = []] = warnings()
+    const [rootWarnings = [], wsWarnings = []] = warnings
     // TODO: these warn for now but shouldnt
-    // https://github.com/npm/arborist/issues/347
+    // https://github.com/npm/cli/issues/4270
     t.comment('FIXME')
     t.match(rootWarnings, ['warn', 'ERESOLVE', 'overriding peer dependency', {
       code: 'ERESOLVE',
@@ -3280,7 +3445,7 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     t.matchSnapshot(printTree(wsTree), 'workspace tree')
   })
 
-  t.test('conflicting peerSets do warn', async t => {
+  await t.test('conflicting peerSets do warn', async t => {
     // ```
     // project -> (a@2)
     // a@2 -> (b), PEER(c@2), PEER(d@2)
@@ -3290,7 +3455,8 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     // d@2 -> PEER(c@2)
     // ```
 
-    const warnings = warningTracker()
+    createRegistry(t, true)
+    const warnings = warningTracker(t)
     const [rootTree, wsTree] = await rootAndWs({
       // It's 2.0.1 because I messed up publishing 2.0.0
       '@lukekarrys/workspace-peer-dep-infinite-loop-a': '2.0.1',
@@ -3325,12 +3491,12 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     t.equal(wsD.version, '1.0.0', 'workspace d version')
 
     // TODO: these should not be undefined
-    // https://github.com/npm/arborist/issues/348
+    // https://github.com/npm/cli/issues/4269
     t.comment('FIXME')
     t.equal((wsTargetC || {}).version, undefined, 'workspace target c version')
     t.equal((wsTargetD || {}).version, undefined, 'workspace target d version')
 
-    const [rootWarnings, wsWarnings] = warnings()
+    const [rootWarnings, wsWarnings] = warnings
     t.match(rootWarnings, ['warn', 'ERESOLVE', 'overriding peer dependency', {
       code: 'ERESOLVE',
     }], 'root warning is an ERESOLVE')
@@ -3343,12 +3509,10 @@ t.test('competing peerSets resolve in both root and workspace', t => {
     t.matchSnapshot(printTree(rootTree), 'root tree')
     t.matchSnapshot(printTree(wsTree), 'workspace tree')
   })
-
-  t.end()
 })
 
-t.test('overrides', t => {
-  t.test('throws when override conflicts with dependencies', async (t) => {
+t.test('overrides', async t => {
+  await t.test('throws when override conflicts with dependencies', async (t) => {
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'root',
@@ -3361,10 +3525,11 @@ t.test('overrides', t => {
       }),
     })
 
+    createRegistry(t, false)
     await t.rejects(buildIdeal(path), { code: 'EOVERRIDE' }, 'throws EOVERRIDE')
   })
 
-  t.test('throws when override conflicts with devDependencies', async (t) => {
+  await t.test('throws when override conflicts with devDependencies', async (t) => {
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'root',
@@ -3377,10 +3542,11 @@ t.test('overrides', t => {
       }),
     })
 
+    createRegistry(t, false)
     await t.rejects(buildIdeal(path), { code: 'EOVERRIDE' }, 'throws EOVERRIDE')
   })
 
-  t.test('throws when override conflicts with peerDependencies', async (t) => {
+  await t.test('throws when override conflicts with peerDependencies', async (t) => {
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'root',
@@ -3393,20 +3559,11 @@ t.test('overrides', t => {
       }),
     })
 
+    createRegistry(t, false)
     await t.rejects(buildIdeal(path), { code: 'EOVERRIDE' }, 'throws EOVERRIDE')
   })
 
   t.test('overrides a nested dependency', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
-
     const path = t.testdir({
       'package.json': JSON.stringify({
         name: 'root',
@@ -3418,6 +3575,17 @@ t.test('overrides', t => {
         },
       }),
     })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const tree = await buildIdeal(path)
 
@@ -3430,15 +3598,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a nested dependency with a more specific override', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3469,16 +3639,58 @@ t.test('overrides', t => {
     t.equal(barEdge.to.version, '2.0.0')
   })
 
-  t.test('does not override a nested dependency when parent spec does not match', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
+  t.test('overrides a nested dependency reached through a file: link — npm/cli#9659', async (t) => {
+    // A root override targeting a transitive dep must apply even when the path to that dep crosses a file:/workspace link boundary.
+    const registry = createRegistry(t, false)
+    const barPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { baz: '^1.0.0' } },
+    ], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    const bazPackuments = registry.packuments(['1.0.0', '2.0.0'], 'baz')
+    const bazManifest = registry.manifest({ name: 'baz', packuments: bazPackuments })
+    await registry.package({ manifest: barManifest })
+    await registry.package({ manifest: bazManifest })
+
+    const path = t.testdir({
+      'package.json': JSON.stringify({
+        name: 'root',
+        dependencies: {
+          a: 'file:./pkgs/a',
+        },
+        overrides: {
+          baz: '2.0.0',
+        },
+      }),
+      pkgs: {
+        a: {
+          'package.json': JSON.stringify({
+            name: 'a',
+            version: '1.0.0',
+            dependencies: { bar: '1.0.0' },
+          }),
+        },
       },
     })
+
+    const tree = await buildIdeal(path)
+
+    const barNode = tree.inventory.query('name', 'bar').values().next().value
+    const bazEdge = barNode.edgesOut.get('baz')
+    t.equal(bazEdge.to.version, '2.0.0', 'override applies across the file: link')
+  })
+
+  t.test('does not override a nested dependency when parent spec does not match', async (t) => {
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest, times: 2 })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3510,15 +3722,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a nested dependency that also exists as a direct dependency', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3553,15 +3767,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a nested dependency that also exists as a direct dependency without a top level specifier', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3594,15 +3810,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a nested dependency with a reference to a direct dependency', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3637,15 +3855,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a nested dependency with a reference to a direct dependency without a top level identifier', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3678,15 +3898,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a peerDependency', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        peerDependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3714,15 +3936,17 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a peerDependency without top level specifier', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        peerDependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    await registry.package({ manifest: fooManifest })
+    await registry.package({ manifest: barManifest })
 
     // this again with no foo
     const path = t.testdir({
@@ -3749,20 +3973,28 @@ t.test('overrides', t => {
   })
 
   t.test('can override inside a cyclical dep chain', async (t) => {
-    generateNocks(t, {
-      foo: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['bar'],
-      },
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['baz'],
-      },
-      baz: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-        dependencies: ['foo'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const fooPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+      { version: '1.0.1', dependencies: { bar: '1.0.1' } },
+      { version: '2.0.0', dependencies: { bar: '2.0.0' } },
+    ], 'foo')
+    const fooManifest = registry.manifest({ name: 'foo', packuments: fooPackuments })
+    const barPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { baz: '1.0.0' } },
+      { version: '1.0.1', dependencies: { baz: '1.0.1' } },
+      { version: '2.0.0', dependencies: { baz: '2.0.0' } },
+    ], 'bar')
+    const barManifest = registry.manifest({ name: 'bar', packuments: barPackuments })
+    const bazPackuments = registry.packuments([
+      { version: '1.0.0', dependencies: { foo: '1.0.0' } },
+      { version: '1.0.1', dependencies: { foo: '1.0.1' } },
+      { version: '2.0.0', dependencies: { foo: '2.0.0' } },
+    ], 'baz')
+    const bazManifest = registry.manifest({ name: 'baz', packuments: bazPackuments })
+    await registry.package({ manifest: fooManifest, times: 2 })
+    await registry.package({ manifest: barManifest, times: 2 })
+    await registry.package({ manifest: bazManifest, times: 2 })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3801,23 +4033,26 @@ t.test('overrides', t => {
     // this tree creates an ERESOLVE due to a@1 having a peer on b@1
     // and d@2 having a peer on b@2, to fix it we override the a@1 peer
     // to be b@2
-    generateNocks(t, {
-      a: {
-        versions: ['1.0.0'],
-        peerDependencies: ['b'],
-      },
-      b: {
-        versions: ['1.0.0', '2.0.0'],
-        peerDependencies: [{ '2.0.0': 'c' }],
-      },
-      c: {
-        versions: ['2.0.0'],
-      },
-      d: {
-        versions: ['2.0.0'],
-        peerDependencies: ['b'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const aPackuments = registry.packuments([
+      { version: '1.0.0', peerDependencies: { b: '1.0.0' } },
+    ], 'a')
+    const aManifest = registry.manifest({ name: 'a', packuments: aPackuments })
+    const bPackuments = registry.packuments([
+      { version: '1.0.0', peerDependencies: { c: '2.0.0' } },
+      { version: '2.0.0', peerDependencies: { c: '2.0.0' } },
+    ], 'b')
+    const bManifest = registry.manifest({ name: 'b', packuments: bPackuments })
+    const cPackuments = registry.packuments(['2.0.0'], 'c')
+    const cManifest = registry.manifest({ name: 'c', packuments: cPackuments })
+    const dPackuments = registry.packuments([
+      { version: '2.0.0', peerDependencies: { b: '2.0.0' } },
+    ], 'd')
+    const dManifest = registry.manifest({ name: 'd', packuments: dPackuments })
+    await registry.package({ manifest: aManifest, times: 2 })
+    await registry.package({ manifest: bManifest, times: 4 })
+    await registry.package({ manifest: cManifest, times: 2 })
+    await registry.package({ manifest: dManifest, times: 2 })
 
     const pkg = {
       name: 'root',
@@ -3864,11 +4099,10 @@ t.test('overrides', t => {
   })
 
   t.test('overrides a workspace dependency', async (t) => {
-    generateNocks(t, {
-      bar: {
-        versions: ['1.0.0', '1.0.1', '2.0.0'],
-      },
-    })
+    const registry = createRegistry(t, false)
+    const packuments = registry.packuments(['1.0.0', '1.0.1', '2.0.0'], 'bar')
+    const manifest = registry.manifest({ name: 'bar', packuments })
+    await registry.package({ manifest })
 
     const path = t.testdir({
       'package.json': JSON.stringify({
@@ -3907,7 +4141,81 @@ t.test('overrides', t => {
     t.equal(fooBarEdge.to.version, '2.0.0')
   })
 
-  t.end()
+  t.test('root overrides should be respected by workspaces on subsequent installs', async t => {
+    // • The root package.json declares a workspaces field, a direct dependency on "abbrev" with version constraint "^1.1.1", and an overrides field for "abbrev" also "^1.1.1".
+    // • The workspace "onepackage" depends on "abbrev" at "1.0.3".
+    const rootPkg = {
+      name: 'root',
+      version: '1.0.0',
+      workspaces: ['onepackage'],
+      dependencies: {
+        abbrev: '^1.1.1',
+        wrappy: '1.0.1',
+      },
+      overrides: {
+        abbrev: '^1.1.1',
+        wrappy: '1.0.1',
+      },
+    }
+    const workspacePkg = {
+      name: 'onepackage',
+      version: '1.0.0',
+      dependencies: {
+        abbrev: '1.0.3',
+        wrappy: '1.0.1',
+      },
+    }
+
+    createRegistry(t, true)
+
+    const dir = t.testdir({
+      'package.json': JSON.stringify(rootPkg, null, 2),
+      onepackage: {
+        'package.json': JSON.stringify(workspacePkg, null, 2),
+      },
+    })
+
+    // fresh install
+    const tree1 = await buildIdeal(dir)
+
+    // The ideal tree should resolve "abbrev" at the root to 1.1.1.
+    t.equal(
+      tree1.children.get('abbrev').package.version,
+      '1.1.1',
+      'first install: root "abbrev" is forced to version 1.1.1'
+    )
+    // The workspace "onepackage" should not have its own nested "abbrev".
+    const onepackageNode1 = tree1.children.get('onepackage').target
+    t.notOk(
+      onepackageNode1.children.has('abbrev'),
+      'first install: workspace does not install "abbrev" separately'
+    )
+
+    // Write out the package-lock.json to disk to mimic a real install.
+    await tree1.meta.save()
+
+    // Simulate re-running install (which reads the package-lock).
+    const tree2 = await buildIdeal(dir)
+
+    // tree2 should NOT have its own abbrev dependency.
+    const onepackageNode2 = tree2.children.get('onepackage').target
+    t.notOk(
+      onepackageNode2.children.has('abbrev'),
+      'workspace should NOT have nested "abbrev" after subsequent install'
+    )
+
+    // The root "abbrev" should still be 1.1.1.
+    t.equal(
+      tree2.children.get('abbrev').package.version,
+      '1.1.1',
+      'second install: root "abbrev" is still forced to version 1.1.1')
+
+    // Workspace targets inherit the root override set via their parent Link node, which is correct behavior needed for proper override propagation through the dependency tree.
+    t.ok(
+      onepackageNode2.overrides,
+      'workspace target inherits root overrides via link propagation'
+    )
+  })
 })
 
 t.test('store files with a custom indenting', async t => {
@@ -3919,6 +4227,1282 @@ t.test('store files with a custom indenting', async t => {
   const path = t.testdir({
     'package.json': tabIndentedPackageJson,
   })
+  createRegistry(t, true)
   const tree = await buildIdeal(path)
   t.matchSnapshot(String(tree.meta))
+})
+
+t.test('should take devEngines in account', async t => {
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'empty-update',
+      devEngines: {
+        runtime: {
+          name: 'node',
+        },
+      },
+    }),
+  })
+  createRegistry(t, false)
+  const tree = await buildIdeal(path)
+  t.matchSnapshot(String(tree.meta))
+})
+
+t.test('engine checking respects omit flags', async t => {
+  const testFixture = resolve(fixtures, 'engine-omit-test')
+
+  t.test('fail on engine mismatch in devDependencies without omit=dev', async t => {
+    await t.rejects(buildIdeal(testFixture, {
+      nodeVersion: '12.18.4',
+      engineStrict: true,
+    }),
+    { code: 'EBADENGINE' },
+    'should fail with EBADENGINE when devDependencies have engine mismatch'
+    )
+  })
+
+  t.test('skip engine check for devDependencies with omit=dev', async t => {
+    // This should NOT throw an EBADENGINE error
+    await buildIdeal(testFixture, {
+      nodeVersion: '12.18.4',
+      engineStrict: true,
+      omit: ['dev'],
+    })
+    t.pass('should succeed when omitting dev dependencies with engine mismatches')
+  })
+
+  t.test('skip engine check for optionalDependencies with omit=optional', async t => {
+    const optionalFixture = resolve(fixtures, 'optional-engine-omit-test')
+    await buildIdeal(optionalFixture, {
+      nodeVersion: '12.18.4',
+      engineStrict: true,
+      omit: ['optional'],
+    })
+    t.pass('should succeed when omitting optional dependencies with engine mismatches')
+  })
+
+  t.test('skip engine check for peerDependencies with omit=peer', async t => {
+    const peerFixture = resolve(fixtures, 'peer-engine-omit-test')
+    await buildIdeal(peerFixture, {
+      nodeVersion: '12.18.4',
+      engineStrict: true,
+      omit: ['peer'],
+    })
+    t.pass('should succeed when omitting peer dependencies with engine mismatches')
+  })
+})
+
+t.test('installLinks behavior with project-internal file dependencies', async t => {
+  t.test('project-internal file dependencies are always symlinked regardless of installLinks', async t => {
+    const path = t.testdir({
+      'package.json': JSON.stringify({
+        name: 'test-root',
+        version: '1.0.0',
+        dependencies: {
+          'local-pkg': 'file:./packages/local-pkg',
+        },
+      }),
+      packages: {
+        'local-pkg': {
+          'package.json': JSON.stringify({
+            name: 'local-pkg',
+            version: '1.0.0',
+            dependencies: {
+              'local-shared': 'file:../local-shared', // Project-internal dependency
+            },
+          }),
+          'index.js': 'module.exports = "local-pkg"',
+        },
+        'local-shared': {
+          'package.json': JSON.stringify({
+            name: 'local-shared',
+            version: '1.0.0',
+          }),
+          'index.js': 'module.exports = "local-shared"',
+        },
+      },
+    })
+
+    createRegistry(t, false)
+
+    // Test with installLinks=true (this used to fail before our fix)
+    const arb = newArb(path, { installLinks: true })
+    const tree = await arb.buildIdealTree()
+
+    // Both packages should be present in the tree
+    t.ok(tree.children.has('local-pkg'), 'local-pkg should be in the tree')
+    t.ok(tree.children.has('local-shared'), 'local-shared should be in the tree')
+
+    // Both should be Links (symlinked) because they are project-internal
+    const localPkg = tree.children.get('local-pkg')
+    const localShared = tree.children.get('local-shared')
+
+    t.ok(localPkg.isLink, 'local-pkg should be a link')
+    t.ok(localShared.isLink, 'local-shared should be a link (hoisted from local-pkg)')
+
+    // Verify the paths are correct
+    t.ok(localPkg.realpath.endsWith(join('packages', 'local-pkg')), 'local-pkg should link to correct path')
+    t.ok(localShared.realpath.endsWith(join('packages', 'local-shared')), 'local-shared should link to correct path')
+  })
+
+  t.test('external file dependencies respect installLinks setting', async t => {
+    // Create test structure with both project and external dependency in same testdir
+    const testRoot = t.testdir({
+      project: {
+        'package.json': JSON.stringify({
+          name: 'test-project',
+          version: '1.0.0',
+          dependencies: {
+            'external-lib': 'file:../external-lib', // External dependency (outside project)
+          },
+        }),
+      },
+      'external-lib': {
+        'package.json': JSON.stringify({
+          name: 'external-lib',
+          version: '1.0.0',
+        }),
+        'index.js': 'module.exports = "external-lib"',
+      },
+    })
+
+    const projectPath = join(testRoot, 'project')
+    createRegistry(t, false)
+
+    // Test with installLinks=true - external dependency should be copied (not linked)
+    const arbWithLinks = newArb(projectPath, { installLinks: true })
+    const treeWithLinks = await arbWithLinks.buildIdealTree()
+
+    t.ok(treeWithLinks.children.has('external-lib'), 'external-lib should be in the tree')
+    const externalWithLinks = treeWithLinks.children.get('external-lib')
+    t.notOk(externalWithLinks.isLink, 'external-lib should not be a link when installLinks=true')
+
+    // Test with installLinks=false - external dependency should be linked
+    const arbNoLinks = newArb(projectPath, { installLinks: false })
+    const treeNoLinks = await arbNoLinks.buildIdealTree()
+
+    t.ok(treeNoLinks.children.has('external-lib'), 'external-lib should be in the tree')
+    const externalNoLinks = treeNoLinks.children.get('external-lib')
+    t.ok(externalNoLinks.isLink, 'external-lib should be a link when installLinks=false')
+  })
+
+  t.test('mixed internal and external file dependencies', async t => {
+    const testRoot = t.testdir({
+      project: {
+        'package.json': JSON.stringify({
+          name: 'mixed-test',
+          version: '1.0.0',
+          dependencies: {
+            'internal-pkg': 'file:./lib/internal-pkg',
+            'external-dep': 'file:../external-dep', // External dependency
+          },
+        }),
+        lib: {
+          'internal-pkg': {
+            'package.json': JSON.stringify({
+              name: 'internal-pkg',
+              version: '1.0.0',
+              dependencies: {
+                'internal-shared': 'file:../internal-shared', // Project-internal
+              },
+            }),
+            'index.js': 'module.exports = "internal-pkg"',
+          },
+          'internal-shared': {
+            'package.json': JSON.stringify({
+              name: 'internal-shared',
+              version: '1.0.0',
+            }),
+            'index.js': 'module.exports = "internal-shared"',
+          },
+        },
+      },
+      'external-dep': {
+        'package.json': JSON.stringify({
+          name: 'external-dep',
+          version: '1.0.0',
+        }),
+        'index.js': 'module.exports = "external-dep"',
+      },
+    })
+
+    const projectPath = join(testRoot, 'project')
+    createRegistry(t, false)
+
+    const arb = newArb(projectPath, { installLinks: true })
+    const tree = await arb.buildIdealTree()
+
+    // All dependencies should be present
+    t.ok(tree.children.has('internal-pkg'), 'internal-pkg should be in tree')
+    t.ok(tree.children.has('internal-shared'), 'internal-shared should be in tree')
+    t.ok(tree.children.has('external-dep'), 'external-dep should be in tree')
+
+    // Internal dependencies should be links (project-internal rule)
+    const internalPkg = tree.children.get('internal-pkg')
+    const internalShared = tree.children.get('internal-shared')
+    t.ok(internalPkg.isLink, 'internal-pkg should be a link (project-internal)')
+    t.ok(internalShared.isLink, 'internal-shared should be a link (project-internal)')
+
+    // External dependency should not be a link (respects installLinks=true)
+    const externalDep = tree.children.get('external-dep')
+    t.notOk(externalDep.isLink, 'external-dep should not be a link (respects installLinks=true)')
+  })
+
+  t.test('code coverage for project-internal file dependency edge cases', async t => {
+    const testRoot = t.testdir({
+      'parent-dir-external': {
+        'package.json': JSON.stringify({
+          name: 'parent-dir-external',
+          version: '1.0.0',
+        }),
+        'index.js': 'module.exports = "parent-dir-external"',
+      },
+      project: {
+        'package.json': JSON.stringify({
+          name: 'coverage-test',
+          version: '1.0.0',
+          dependencies: {
+            'current-dir-dep': 'file:./current-dir-dep', // file:./ case
+            'parent-dir-external': 'file:../parent-dir-external', // file:../ case outside project
+          },
+        }),
+        'current-dir-dep': {
+          'package.json': JSON.stringify({
+            name: 'current-dir-dep',
+            version: '1.0.0',
+          }),
+          'index.js': 'module.exports = "current-dir-dep"',
+        },
+      },
+    })
+
+    const projectPath = join(testRoot, 'project')
+    createRegistry(t, false)
+
+    // Test with installLinks=false to verify external dependencies respect setting
+    const arb = newArb(projectPath, { installLinks: false })
+    const tree = await arb.buildIdealTree()
+
+    t.ok(tree.children.has('current-dir-dep'), 'current-dir-dep should be in tree')
+    t.ok(tree.children.has('parent-dir-external'), 'parent-dir-external should be in tree')
+
+    const currentDirDep = tree.children.get('current-dir-dep')
+    const parentDirExternal = tree.children.get('parent-dir-external')
+
+    // current-dir-dep should be a link (project-internal always links)
+    t.ok(currentDirDep.isLink, 'current-dir-dep should be a link (file:./ within project)')
+
+    // parent-dir-external should ALSO be a link (external, but installLinks=false means link everything)
+    t.ok(parentDirExternal.isLink, 'parent-dir-external should be a link (file:../ outside project, installLinks=false means link)')
+
+    // Verify the logic branches - current-dir should resolve within project, parent-dir should not
+    t.match(currentDirDep.realpath, new RegExp(join(testRoot, 'project').replace(/[.*+?^${}()|[\]\\]/g, '\\$&')),
+      'current-dir-dep realpath should be within project root')
+  })
+
+  t.test('installLinks=true with nested project-internal file dependencies', async t => {
+    // Test a more complex scenario with nested dependencies to ensure comprehensive coverage
+    const testRoot = t.testdir({
+      project: {
+        'package.json': JSON.stringify({
+          name: 'nested-test',
+          version: '1.0.0',
+          dependencies: {
+            'wrapper-pkg': 'file:./packages/wrapper-pkg',
+          },
+        }),
+        packages: {
+          'wrapper-pkg': {
+            'package.json': JSON.stringify({
+              name: 'wrapper-pkg',
+              version: '1.0.0',
+              dependencies: {
+                'nested-dep': 'file:../nested-dep',
+              },
+            }),
+          },
+          'nested-dep': {
+            'package.json': JSON.stringify({
+              name: 'nested-dep',
+              version: '1.0.0',
+            }),
+          },
+        },
+      },
+    })
+
+    const projectPath = join(testRoot, 'project')
+    createRegistry(t, false)
+
+    const arb = newArb(projectPath, { installLinks: true })
+    const tree = await arb.buildIdealTree()
+
+    const wrapperPkg = tree.children.get('wrapper-pkg')
+    const nestedDep = tree.children.get('nested-dep')
+
+    t.ok(wrapperPkg, 'wrapper-pkg should be found')
+    t.ok(wrapperPkg.isLink, 'wrapper-pkg should be a link (project-internal)')
+    t.ok(nestedDep, 'nested-dep should be found')
+    t.ok(nestedDep.isLink, 'nested-dep should be a link (project-internal)')
+  })
+
+  t.test('installLinks=true with transitive external file dependencies', async t => {
+    // mainpkg installs b (external file dep) with --install-links
+    // b depends on a (another external file dep via file:../a)
+    // Both should be installed (not linked) and dependencies should resolve correctly
+    const testRoot = t.testdir({
+      a: {
+        'package.json': JSON.stringify({
+          name: 'a',
+          main: 'index.js',
+        }),
+        'index.js': 'export const A = "A";',
+      },
+      b: {
+        'package.json': JSON.stringify({
+          name: 'b',
+          main: 'index.js',
+          dependencies: {
+            a: 'file:../a',
+          },
+        }),
+        'index.js': 'import {A} from "a";export const fn = () => console.log(A);',
+      },
+      mainpkg: {
+        'package.json': JSON.stringify({}),
+      },
+    })
+
+    const mainpkgPath = join(testRoot, 'mainpkg')
+    const bPath = join(testRoot, 'b')
+    createRegistry(t, false)
+
+    const arb = newArb(mainpkgPath, { installLinks: true })
+
+    // Add the external file dependency using the full path
+    await arb.buildIdealTree({ add: [`file:${bPath}`] })
+
+    const tree = arb.idealTree
+
+    // Both packages should be present in the tree
+    const packageB = tree.children.get('b')
+    const packageA = tree.children.get('a')
+
+    t.ok(packageB, 'package b should be found in tree')
+    t.ok(packageA, 'package a should be found in tree (transitive dependency)')
+
+    // Both should be installed (not linked) due to installLinks=true
+    t.notOk(packageB.isLink, 'package b should not be a link (installLinks=true)')
+    t.notOk(packageA.isLink, 'package a should not be a link (transitive with installLinks=true)')
+
+    // Verify that the resolved paths are correct
+    t.match(packageB.resolved, /file:.*[/\\]b$/, 'package b should have correct resolved path')
+    t.match(packageA.resolved, /file:.*[/\\]a$/, 'package a should have correct resolved path')
+
+    // Verify the dependency relationship
+    const edgeToA = packageB.edgesOut.get('a')
+    t.ok(edgeToA, 'package b should have an edge to a')
+    t.ok(edgeToA.valid, 'the edge from b to a should be valid')
+    t.equal(edgeToA.to, packageA, 'the edge from b should point to package a')
+  })
+})
+
+t.test('re-queue already-seen nodes when placed dep invalidates peerOptional (save=true, #8726)', async t => {
+  // Scenario: alpha has peerOptional on shared@1.0.0, beta has dep on shared@^1.0.0.
+  // With save=true, alpha is processed first (alphabetical order in DepsQueue),
+  // its peerOptional is not a problem (missing is OK for peerOptional).
+  // Beta is processed next, placing shared@1.1.0 (latest ^1.0.0).
+  // This invalidates alpha's peerOptional edge, triggering re-queue of alpha.
+  const registry = createRegistry(t, false)
+
+  const alphaPack = registry.packument({
+    name: 'alpha',
+    version: '1.0.0',
+    peerDependencies: { shared: '1.0.0' },
+    peerDependenciesMeta: { shared: { optional: true } },
+  })
+  const alphaManifest = registry.manifest({ name: 'alpha', packuments: [alphaPack] })
+  await registry.package({ manifest: alphaManifest })
+
+  const betaPack = registry.packument({
+    name: 'beta',
+    version: '1.0.0',
+    dependencies: { shared: '^1.0.0' },
+  })
+  const betaManifest = registry.manifest({ name: 'beta', packuments: [betaPack] })
+  await registry.package({ manifest: betaManifest })
+
+  const sharedPacks = registry.packuments(['1.0.0', '1.1.0'], 'shared')
+  const sharedManifest = registry.manifest({ name: 'shared', packuments: sharedPacks })
+  await registry.package({ manifest: sharedManifest, times: 2 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-8726-install',
+      version: '1.0.0',
+      dependencies: {
+        alpha: '1.0.0',
+        beta: '1.0.0',
+      },
+    }),
+  })
+
+  const arb = newArb(path, { save: true })
+  const tree = await arb.buildIdealTree()
+
+  t.ok(tree.children.get('alpha'), 'alpha is in the tree')
+  t.ok(tree.children.get('beta'), 'beta is in the tree')
+  t.ok(tree.children.get('shared'), 'shared is in the tree')
+})
+
+t.test('re-queue already-seen nodes when save=false update invalidates peerOptional', async t => {
+  const registry = createRegistry(t, false)
+
+  const alphaPack = registry.packument({
+    name: 'alpha',
+    version: '1.0.0',
+    peerDependencies: { shared: '1.0.0' },
+    peerDependenciesMeta: { shared: { optional: true } },
+  })
+  const alphaManifest = registry.manifest({ name: 'alpha', packuments: [alphaPack] })
+  await registry.package({ manifest: alphaManifest })
+
+  const betaPack = registry.packument({
+    name: 'beta',
+    version: '1.0.0',
+    dependencies: { shared: '^1.0.0' },
+  })
+  const betaManifest = registry.manifest({ name: 'beta', packuments: [betaPack] })
+  await registry.package({ manifest: betaManifest })
+
+  const sharedPacks = registry.packuments(['1.0.0', '1.1.0'], 'shared')
+  const sharedManifest = registry.manifest({ name: 'shared', packuments: sharedPacks })
+  await registry.package({ manifest: sharedManifest, times: 2 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-8726-save-false-update',
+      version: '1.0.0',
+      dependencies: {
+        alpha: '1.0.0',
+        beta: '1.0.0',
+      },
+    }),
+  })
+
+  const arb = newArb(path, { save: false })
+  const tree = await arb.buildIdealTree({ update: true })
+
+  t.ok(tree.children.get('alpha'), 'alpha is in the tree')
+  t.ok(tree.children.get('beta'), 'beta is in the tree')
+  t.ok(tree.children.get('shared'), 'shared is in the tree')
+})
+
+t.test('skip invalid peerOptional edges when save=false and not mutating (#8726)', async t => {
+  // With save=false and no tree mutation (npm ci behavior), invalid peerOptional
+  // edges should NOT be treated as problems. The locked tree is trusted as-is.
+  createRegistry(t, false)
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-8726-ci',
+      version: '1.0.0',
+      dependencies: {
+        alpha: '1.0.0',
+        beta: '1.0.0',
+      },
+    }),
+    'package-lock.json': JSON.stringify({
+      name: 'test-8726-ci',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': {
+          name: 'test-8726-ci',
+          version: '1.0.0',
+          dependencies: { alpha: '1.0.0', beta: '1.0.0' },
+        },
+        'node_modules/alpha': {
+          version: '1.0.0',
+          resolved: 'https://registry.npmjs.org/alpha/-/alpha-1.0.0.tgz',
+          peerDependencies: { shared: '1.0.0' },
+          peerDependenciesMeta: { shared: { optional: true } },
+        },
+        'node_modules/beta': {
+          version: '1.0.0',
+          resolved: 'https://registry.npmjs.org/beta/-/beta-1.0.0.tgz',
+          dependencies: { shared: '^1.0.0' },
+        },
+        'node_modules/shared': {
+          version: '1.1.0',
+          resolved: 'https://registry.npmjs.org/shared/-/shared-1.1.0.tgz',
+        },
+      },
+    }),
+  })
+
+  const arb = newArb(path, { save: false })
+  const tree = await arb.buildIdealTree()
+
+  t.ok(tree.children.get('alpha'), 'alpha is in the tree')
+  t.ok(tree.children.get('beta'), 'beta is in the tree')
+  t.equal(tree.children.get('shared').version, '1.1.0',
+    'shared stays at 1.1.0 - peerOptional mismatch is not treated as a problem')
+})
+
+t.test('save=false non-mutating build ignores invalid peerOptional problem edges', async t => {
+  const registry = createRegistry(t, false)
+
+  const gammaPack = registry.packument({
+    name: 'gamma',
+    version: '1.0.0',
+  })
+  const gammaManifest = registry.manifest({ name: 'gamma', packuments: [gammaPack] })
+  await registry.package({ manifest: gammaManifest })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-8726-save-false-non-mutating-problem-edges',
+      version: '1.0.0',
+      dependencies: {
+        alpha: '1.0.0',
+      },
+    }),
+    'package-lock.json': JSON.stringify({
+      name: 'test-8726-save-false-non-mutating-problem-edges',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': {
+          name: 'test-8726-save-false-non-mutating-problem-edges',
+          version: '1.0.0',
+          dependencies: { alpha: '1.0.0' },
+        },
+        'node_modules/alpha': {
+          version: '1.0.0',
+          resolved: 'https://registry.npmjs.org/alpha/-/alpha-1.0.0.tgz',
+          dependencies: { gamma: '1.0.0' },
+          peerDependencies: { shared: '1.0.0' },
+          peerDependenciesMeta: { shared: { optional: true } },
+        },
+        'node_modules/shared': {
+          version: '1.1.0',
+          resolved: 'https://registry.npmjs.org/shared/-/shared-1.1.0.tgz',
+        },
+      },
+    }),
+  })
+
+  const arb = newArb(path, { save: false })
+  const tree = await arb.buildIdealTree()
+
+  t.ok(tree.children.get('gamma'), 'missing non-peer dependency is resolved')
+})
+
+t.test('update does not leave invalid peerOptional edges when save=false', async t => {
+  // npm update defaults to save=false because it should not rewrite package.json
+  // ranges. It still mutates and writes the lockfile, so it cannot use the
+  // npm-ci behavior of trusting invalid peerOptional edges in the locked tree.
+  const registry = createRegistry(t, false)
+
+  const alphaPacks = [
+    registry.packument({ name: 'alpha', version: '1.0.0' }),
+    registry.packument({
+      name: 'alpha',
+      version: '1.1.0',
+      peerDependencies: { shared: '^1.0.0' },
+      peerDependenciesMeta: { shared: { optional: true } },
+    }),
+  ]
+  const alphaManifest = registry.manifest({ name: 'alpha', packuments: alphaPacks })
+  await registry.package({ manifest: alphaManifest })
+
+  const sharedPacks = registry.packuments(['1.0.0', '2.0.0', '2.0.1'], 'shared')
+  const sharedManifest = registry.manifest({ name: 'shared', packuments: sharedPacks })
+  await registry.package({ manifest: sharedManifest, times: 2 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-peer-optional-update',
+      version: '1.0.0',
+      dependencies: {
+        alpha: '^1.0.0',
+        shared: '^2.0.0',
+      },
+    }),
+    'package-lock.json': JSON.stringify({
+      name: 'test-peer-optional-update',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': {
+          name: 'test-peer-optional-update',
+          version: '1.0.0',
+          dependencies: { alpha: '^1.0.0', shared: '^2.0.0' },
+        },
+        'node_modules/alpha': {
+          version: '1.0.0',
+          resolved: 'https://registry.npmjs.org/alpha/-/alpha-1.0.0.tgz',
+        },
+        'node_modules/shared': {
+          version: '2.0.0',
+          resolved: 'https://registry.npmjs.org/shared/-/shared-2.0.0.tgz',
+        },
+      },
+    }),
+  })
+
+  const arb = newArb(path, { save: false })
+  await t.rejects(arb.buildIdealTree({ update: true }), {
+    code: 'ERESOLVE',
+  }, 'lockfile-mutating update should reject instead of keeping an invalid peerOptional edge')
+})
+
+t.test('add does not leave invalid peerOptional edges when save=false', async t => {
+  // npm install <pkg> --no-save also mutates and writes the lockfile without
+  // changing package.json. It should not use npm-ci behavior either.
+  const registry = createRegistry(t, false)
+
+  const alphaPack = registry.packument({
+    name: 'alpha',
+    version: '1.0.0',
+    peerDependencies: { shared: '^1.0.0' },
+    peerDependenciesMeta: { shared: { optional: true } },
+  })
+  const alphaManifest = registry.manifest({ name: 'alpha', packuments: [alphaPack] })
+  await registry.package({ manifest: alphaManifest })
+
+  const sharedPacks = registry.packuments(['1.0.0', '2.0.0'], 'shared')
+  const sharedManifest = registry.manifest({ name: 'shared', packuments: sharedPacks })
+  await registry.package({ manifest: sharedManifest, times: 2 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-peer-optional-add',
+      version: '1.0.0',
+      dependencies: {
+        shared: '^2.0.0',
+      },
+    }),
+    'package-lock.json': JSON.stringify({
+      name: 'test-peer-optional-add',
+      version: '1.0.0',
+      lockfileVersion: 3,
+      requires: true,
+      packages: {
+        '': {
+          name: 'test-peer-optional-add',
+          version: '1.0.0',
+          dependencies: { shared: '^2.0.0' },
+        },
+        'node_modules/shared': {
+          version: '2.0.0',
+          resolved: 'https://registry.npmjs.org/shared/-/shared-2.0.0.tgz',
+        },
+      },
+    }),
+  })
+
+  const arb = newArb(path, { save: false })
+  await t.rejects(arb.buildIdealTree({ add: ['alpha@1.0.0'] }), {
+    code: 'ERESOLVE',
+  }, 'lockfile-mutating add should reject instead of keeping an invalid peerOptional edge')
+})
+
+t.test('circular peer back-off does not crash when node is detached mid-resolution (#5222)', async t => {
+  // host (installed) has optional peer plugin@^1.0.0. Adding plugin resolves plugin@2.0.0,
+  // whose peer set replaces it with plugin@1.0.0 to satisfy host, detaching plugin@2 mid-loop.
+  // Previously the invalid edge then crashed #explainPeerConflict on the detached node.
+  const registry = createRegistry(t, false)
+
+  const hostPack = registry.packument({
+    name: 'host',
+    version: '1.0.0',
+    peerDependencies: { plugin: '^1.0.0' },
+    peerDependenciesMeta: { plugin: { optional: true } },
+  })
+  const hostManifest = registry.manifest({ name: 'host', packuments: [hostPack] })
+  await registry.package({ manifest: hostManifest, times: 2 })
+
+  const pluginPacks = [
+    registry.packument({ name: 'plugin', version: '1.0.0', peerDependencies: { host: '*' } }),
+    registry.packument({ name: 'plugin', version: '2.0.0', peerDependencies: { host: '*' } }),
+  ]
+  const pluginManifest = registry.manifest({ name: 'plugin', packuments: pluginPacks })
+  await registry.package({ manifest: pluginManifest, times: 2 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-5222',
+      version: '1.0.0',
+      devDependencies: { host: '^1.0.0' },
+    }),
+    node_modules: {
+      host: {
+        'package.json': JSON.stringify({
+          name: 'host',
+          version: '1.0.0',
+          peerDependencies: { plugin: '^1.0.0' },
+          peerDependenciesMeta: { plugin: { optional: true } },
+        }),
+      },
+    },
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree({ add: ['plugin'], saveType: 'dev' })
+
+  t.equal(tree.children.get('plugin').version, '1.0.0',
+    'backs off to plugin@1.0.0 to satisfy the optional peer instead of crashing')
+})
+
+t.test('does not fetch packuments for peerOptional deps that will not be installed', async t => {
+  const registry = createRegistry(t, false)
+
+  const hostPack = registry.packument({
+    name: 'host',
+    version: '1.0.0',
+    peerDependencies: { plugin: '^1.0.0' },
+    peerDependenciesMeta: { plugin: { optional: true } },
+  })
+  const hostManifest = registry.manifest({ name: 'host', packuments: [hostPack] })
+  await registry.package({ manifest: hostManifest })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: { host: '^1.0.0' },
+    }),
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree()
+
+  t.equal(tree.children.get('host').version, '1.0.0', 'installed host')
+  t.equal(tree.children.get('plugin'), undefined, 'did not install the optional peer')
+  const edge = tree.children.get('host').edgesOut.get('plugin')
+  t.equal(edge.type, 'peerOptional')
+  t.equal(edge.to, null, 'peerOptional edge left unresolved')
+  t.ok(edge.valid, 'missing peerOptional edge is valid')
+})
+
+t.test('resolves peerOptional deps installed by another dependent', async t => {
+  const registry = createRegistry(t, false)
+
+  const hostPack = registry.packument({
+    name: 'host',
+    version: '1.0.0',
+    peerDependencies: { plugin: '^1.0.0' },
+    peerDependenciesMeta: { plugin: { optional: true } },
+  })
+  const hostManifest = registry.manifest({ name: 'host', packuments: [hostPack] })
+  await registry.package({ manifest: hostManifest })
+
+  const otherPack = registry.packument({
+    name: 'other',
+    version: '1.0.0',
+    dependencies: { plugin: '^1.0.0' },
+  })
+  const otherManifest = registry.manifest({ name: 'other', packuments: [otherPack] })
+  await registry.package({ manifest: otherManifest })
+
+  const pluginManifest = registry.manifest({ name: 'plugin' })
+  await registry.package({ manifest: pluginManifest })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: { host: '^1.0.0', other: '^1.0.0' },
+    }),
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree()
+
+  const plugin = tree.children.get('plugin')
+  t.ok(plugin, 'installed the plugin for the dependent that requires it')
+  const edge = tree.children.get('host').edgesOut.get('plugin')
+  t.equal(edge.type, 'peerOptional')
+  t.equal(edge.to, plugin, 'peerOptional edge resolved to the installed plugin')
+  t.ok(edge.valid, 'peerOptional edge is valid')
+})
+
+t.test('does not fetch packuments for peerOptional deps satisfied by the actual tree', async t => {
+  const registry = createRegistry(t, false)
+
+  const hostPack = registry.packument({
+    name: 'host',
+    version: '1.0.0',
+    peerDependencies: { plugin: '^1.0.0' },
+    peerDependenciesMeta: { plugin: { optional: true } },
+  })
+  const hostManifest = registry.manifest({ name: 'host', packuments: [hostPack] })
+  await registry.package({ manifest: hostManifest })
+
+  const path = t.testdir({
+    node_modules: {
+      other: {
+        'package.json': JSON.stringify({
+          name: 'other',
+          version: '1.0.0',
+          dependencies: { plugin: '^1.0.0' },
+        }),
+      },
+      plugin: {
+        'package.json': JSON.stringify({
+          name: 'plugin',
+          version: '1.0.0',
+        }),
+      },
+    },
+    'package.json': JSON.stringify({
+      dependencies: { other: '^1.0.0' },
+    }),
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree({ add: ['host@^1.0.0'] })
+
+  const plugin = tree.children.get('plugin')
+  t.equal(plugin.version, '1.0.0', 'kept the already installed plugin')
+  const edge = tree.children.get('host').edgesOut.get('plugin')
+  t.equal(edge.type, 'peerOptional')
+  t.equal(edge.to, plugin, 'peerOptional edge resolved to the existing plugin')
+  t.ok(edge.valid, 'peerOptional edge is valid')
+})
+
+t.test('peerOptional prefers existing tree node over registry fetch (#9249)', async t => {
+  // Reproduction: ts-jest has peerOptional jest-util@"^29||^30".
+  // @types/jest@28 → expect@28 → jest-util@28 placed at root first.
+  // jest@29 → jest-util@29 nested (root slot taken by @28).
+  // ts-jest re-queued, peerOptional jest-util resolves to root @28 → INVALID.
+  // Without fix: #nodeFromEdge fetches jest-util@30 (latest ^29||^30), blocks @29.
+  // With fix: #findHoistableNode finds nested @29, PlaceDep hoists it to root.
+  const registry = createRegistry(t, false)
+
+  const jestPack = registry.packument({
+    name: 'jest',
+    version: '29.0.0',
+    dependencies: { 'jest-util': '^29.0.0' },
+  })
+  const jestManifest = registry.manifest({ name: 'jest', packuments: [jestPack] })
+  await registry.package({ manifest: jestManifest })
+
+  const tsJestPack = registry.packument({
+    name: 'ts-jest',
+    version: '29.0.0',
+    peerDependencies: { jest: '^29.0.0', 'jest-util': '^29.0.0 || ^30.0.0' },
+    peerDependenciesMeta: { 'jest-util': { optional: true } },
+  })
+  const tsJestManifest = registry.manifest({ name: 'ts-jest', packuments: [tsJestPack] })
+  await registry.package({ manifest: tsJestManifest })
+
+  const expectPack = registry.packument({
+    name: 'expect',
+    version: '28.0.0',
+    dependencies: { 'jest-util': '^28.0.0' },
+  })
+  const expectManifest = registry.manifest({ name: 'expect', packuments: [expectPack] })
+  await registry.package({ manifest: expectManifest })
+
+  const atTypesPack = registry.packument({
+    name: '@types/jest',
+    version: '28.0.0',
+    dependencies: { expect: '^28.0.0' },
+  })
+  const atTypesManifest = registry.manifest({ name: '@types/jest', packuments: [atTypesPack] })
+  await registry.package({ manifest: atTypesManifest })
+
+  // Only publish 28, 29, and 30.
+  const jestUtilPacks = registry.packuments(['28.0.0', '29.0.0', '30.0.0'], 'jest-util')
+  const jestUtilManifest = registry.manifest({ name: 'jest-util', packuments: jestUtilPacks })
+  await registry.package({ manifest: jestUtilManifest, times: 2 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: {
+        jest: '^29.0.0',
+        'ts-jest': '^29.0.0',
+        '@types/jest': '^28.0.0',
+      },
+    }),
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree()
+
+  // jest-util@29 at root — found via #findHoistableNode, not fetched as @30
+  t.equal(tree.children.get('jest-util').version, '29.0.0',
+    'jest-util@29 hoisted to root from nested location')
+
+  // ts-jest's peerOptional resolved to @29 from the tree, not @30 from registry
+  const tsJest = tree.children.get('ts-jest')
+  const peerOptEdge = tsJest.edgesOut.get('jest-util')
+  t.equal(peerOptEdge.to.version, '29.0.0',
+    'ts-jest peerOptional jest-util resolved to @29')
+
+  // jest-util@28 nested under expect (incompatible with root @29)
+  const expectNode = [...tree.inventory.query('name', 'expect')][0]
+  t.equal(expectNode?.children?.get('jest-util')?.version, '28.0.0',
+    'jest-util@28 nested under expect')
+})
+
+t.test('peerOptional skips dedupe shortcut when update.names includes the dep', async t => {
+  // Same scenario as above, but with update: { names: ['jest-util'] }.
+  // skipExistingShortcut=true so #findHoistableNode is NOT called;
+  // #nodeFromEdge fetches from registry, getting jest-util@30 (latest matching ^29||^30).
+  const registry = createRegistry(t, false)
+
+  const jestPack = registry.packument({
+    name: 'jest',
+    version: '29.0.0',
+    dependencies: { 'jest-util': '^29.0.0' },
+  })
+  await registry.package({ manifest: registry.manifest({ name: 'jest', packuments: [jestPack] }) })
+
+  const tsJestPack = registry.packument({
+    name: 'ts-jest',
+    version: '29.0.0',
+    peerDependencies: { jest: '^29.0.0', 'jest-util': '^29.0.0 || ^30.0.0' },
+    peerDependenciesMeta: { 'jest-util': { optional: true } },
+  })
+  await registry.package({ manifest: registry.manifest({ name: 'ts-jest', packuments: [tsJestPack] }) })
+
+  const expectPack = registry.packument({
+    name: 'expect',
+    version: '28.0.0',
+    dependencies: { 'jest-util': '^28.0.0' },
+  })
+  await registry.package({ manifest: registry.manifest({ name: 'expect', packuments: [expectPack] }) })
+
+  const atTypesPack = registry.packument({
+    name: '@types/jest',
+    version: '28.0.0',
+    dependencies: { expect: '^28.0.0' },
+  })
+  await registry.package({ manifest: registry.manifest({ name: '@types/jest', packuments: [atTypesPack] }) })
+
+  const jestUtilPacks = registry.packuments(['28.0.0', '29.0.0', '30.0.0'], 'jest-util')
+  await registry.package({ manifest: registry.manifest({ name: 'jest-util', packuments: jestUtilPacks }), times: 3 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: {
+        jest: '^29.0.0',
+        'ts-jest': '^29.0.0',
+        '@types/jest': '^28.0.0',
+      },
+    }),
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree({ update: { names: ['jest-util'] } })
+
+  // With skipExistingShortcut=true, #nodeFromEdge fetches from registry
+  // so jest-util@30 (latest matching ^29||^30) is used instead of deduping @29
+  const tsJest = tree.children.get('ts-jest')
+  const peerOptEdge = tsJest.edgesOut.get('jest-util')
+  t.equal(peerOptEdge.to?.version, '30.0.0', 'peerOptional jest-util refetched to @30, not deduped to @29')
+})
+
+t.test('overrides with bundledDependencies', async t => {
+  t.test('does not infinite loop with bundledDependencies and overrides', async t => {
+    // https://github.com/npm/cli/issues/9227
+    const registry = createRegistry(t, false)
+
+    const bPacks = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+    ], 'b')
+    const cPacks = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+    ], 'c')
+    const barPacks = registry.packuments(['1.0.0', '2.0.0'], 'bar')
+    await registry.package({ manifest: registry.manifest({ name: 'b', packuments: bPacks }) })
+    await registry.package({ manifest: registry.manifest({ name: 'c', packuments: cPacks }) })
+    await registry.package({ manifest: registry.manifest({ name: 'bar', packuments: barPacks }), times: 2 })
+
+    const path = t.testdir({
+      'package.json': JSON.stringify({
+        name: 'root',
+        dependencies: { b: '1.0.0', c: '1.0.0' },
+        bundledDependencies: true,
+        overrides: { bar: '2.0.0' },
+      }),
+    })
+
+    const tree = await buildIdeal(path)
+    t.equal(tree.children.get('bar').version, '2.0.0', 'override applied')
+  })
+
+  t.test('overrides apply to deps the root will bundle and edges are valid', async t => {
+    const registry = createRegistry(t, false)
+
+    const fooPacks = registry.packuments([
+      { version: '1.0.0', dependencies: { bar: '1.0.0' } },
+    ], 'foo')
+    const barPacks = registry.packuments(['1.0.0', '2.0.0'], 'bar')
+    await registry.package({ manifest: registry.manifest({ name: 'foo', packuments: fooPacks }) })
+    await registry.package({ manifest: registry.manifest({ name: 'bar', packuments: barPacks }) })
+
+    const path = t.testdir({
+      'package.json': JSON.stringify({
+        name: 'root',
+        dependencies: { foo: '1.0.0' },
+        bundledDependencies: ['foo'],
+        overrides: { bar: '2.0.0' },
+      }),
+    })
+
+    const tree = await buildIdeal(path)
+    t.equal(tree.children.get('bar').version, '2.0.0', 'override installed correct version')
+
+    const fooBarEdge = tree.edgesOut.get('foo').to.edgesOut.get('bar')
+    t.equal(fooBarEdge.valid, true, 'overridden edge is valid')
+  })
+
+  t.test('overrides do not apply inside a dependency that bundles', async t => {
+    const registry = createRegistry(t, false)
+
+    const depPacks = registry.packuments([{
+      version: '1.0.0',
+      dependencies: { bar: '1.0.0' },
+      bundleDependencies: ['bar'],
+    }], 'dep')
+    await registry.package({ manifest: registry.manifest({ name: 'dep', packuments: depPacks }) })
+
+    const path = t.testdir({
+      'package.json': JSON.stringify({
+        name: 'root',
+        dependencies: { dep: '1.0.0' },
+        overrides: { bar: '2.0.0' },
+      }),
+    })
+
+    const tree = await buildIdeal(path)
+    t.equal(tree.edgesOut.get('dep').valid, true, 'dep edge is valid')
+    t.notOk(tree.children.get('bar'), 'bar stays inside dep bundle')
+  })
+})
+
+t.test('allow-directory=root permits a top-level directory dependency', async t => {
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'root-pkg',
+      version: '1.0.0',
+      dependencies: { 'dir-dep': 'file:./dir-dep' },
+    }),
+    'dir-dep': {
+      'package.json': JSON.stringify({ name: 'dir-dep', version: '1.0.0' }),
+    },
+  })
+  const tree = await buildIdeal(path, { allowDirectory: 'root' })
+  t.ok(tree.children.get('dir-dep'), 'dir-dep is in the ideal tree')
+  t.equal(tree.children.get('dir-dep').isLink, true, 'dir-dep is a Link node')
+})
+
+t.test('allow-directory=none blocks a top-level directory dependency before the symlink branch', async t => {
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'root-pkg',
+      version: '1.0.0',
+      dependencies: { 'dir-dep': 'file:./dir-dep' },
+    }),
+    'dir-dep': {
+      'package.json': JSON.stringify({ name: 'dir-dep', version: '1.0.0' }),
+    },
+  })
+  await t.rejects(
+    buildIdeal(path, { allowDirectory: 'none' }),
+    { code: 'EALLOWDIRECTORY' },
+    'arborist refuses before reaching pacote or the Link branch'
+  )
+})
+
+t.test('allow-directory=root blocks a transitive directory dependency', async t => {
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'root-pkg',
+      version: '1.0.0',
+      dependencies: { parent: 'file:./parent' },
+    }),
+    parent: {
+      'package.json': JSON.stringify({
+        name: 'parent',
+        version: '1.0.0',
+        dependencies: { child: 'file:./child' },
+      }),
+      child: {
+        'package.json': JSON.stringify({ name: 'child', version: '1.0.0' }),
+      },
+    },
+  })
+  await t.rejects(
+    buildIdeal(path, { allowDirectory: 'root' }),
+    { code: 'EALLOWDIRECTORY' },
+    'transitive directory dep is refused because edge.from is not the project root'
+  )
+})
+
+t.test('allow-directory=root soft-skips a transitive optional directory dependency', async t => {
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'root-pkg',
+      version: '1.0.0',
+      dependencies: { parent: 'file:./parent' },
+    }),
+    parent: {
+      'package.json': JSON.stringify({
+        name: 'parent',
+        version: '1.0.0',
+        optionalDependencies: { 'opt-child': 'file:./opt-child' },
+      }),
+      'opt-child': {
+        'package.json': JSON.stringify({ name: 'opt-child', version: '1.0.0' }),
+      },
+    },
+  })
+  const tree = await buildIdeal(path, { allowDirectory: 'root' })
+  t.ok(tree.children.get('parent'), 'parent (root-edge) is in the tree')
+  const optChild = [...tree.inventory.values()].find(n => n.name === 'opt-child')
+  t.ok(optChild, 'blocked optional transitive is recorded in the tree')
+  t.equal(optChild.inert, true, 'blocked optional transitive is marked inert (will not be reified)')
+})
+
+t.test('incomplete manifest from proxy registry prunes optional dep (#9342)', async t => {
+  // When a proxy/upstream registry returns an
+  // incomplete manifest for a platform-specific optional dep it hasn't
+  // cached, the version field is missing.  Our fix in #nodeFromSpec
+  // treats this as EINCOMPLETEMANIFEST load failure so that
+  // #pruneFailedOptional() marks it inert instead of writing a broken
+  // lockfile entry like {"optional": true}.
+  const registry = createRegistry(t, false)
+
+  // parent package with an optional dep
+  const esbuildPack = registry.packument({
+    name: 'esbuild',
+    version: '0.27.7',
+    optionalDependencies: {
+      '@esbuild/aix-ppc64': '0.27.7',
+    },
+  })
+  const esbuildManifest = registry.manifest({ name: 'esbuild', packuments: [esbuildPack] })
+  await registry.package({ manifest: esbuildManifest })
+
+  // simulate proxy registry returning incomplete manifest (no version field)
+  await registry.package({
+    manifest: {
+      _id: '@esbuild/aix-ppc64',
+      _rev: '00-incomplete',
+      name: '@esbuild/aix-ppc64',
+      description: 'incomplete proxy manifest',
+      'dist-tags': { latest: '0.27.7' },
+      versions: {
+        '0.27.7': {
+          _id: '@esbuild/aix-ppc64@0.27.7',
+          name: '@esbuild/aix-ppc64',
+          // NO version field — this is the proxy registry bug
+          dependencies: {},
+          dist: {
+            tarball: 'https://registry.npmjs.org/@esbuild/aix-ppc64/-/aix-ppc64-0.27.7.tgz',
+          },
+        },
+      },
+    },
+  })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'test-incomplete-manifest',
+      version: '1.0.0',
+      devDependencies: { esbuild: '^0.27.0' },
+    }),
+  })
+
+  const arb = newArb(path)
+  const tree = await arb.buildIdealTree()
+
+  // esbuild itself should be in the tree
+  t.ok(tree.children.get('esbuild'), 'esbuild is installed')
+  t.equal(tree.children.get('esbuild').version, '0.27.7', 'esbuild has correct version')
+
+  // @esbuild/aix-ppc64 should be marked inert (EINCOMPLETEMANIFEST → loadFailure)
+  // pruneFailedOptional marks it inert so it won't be written to lockfile
+  const aixNodes = [...tree.inventory.query('name', '@esbuild/aix-ppc64')]
+  const aixNode = aixNodes.find(n => n.root === tree)
+  t.ok(aixNode, 'incomplete optional dep node exists in tree')
+  t.equal(aixNode.inert, true, 'incomplete optional dep is marked inert')
+  t.equal(aixNode.errors[0].code, 'EINCOMPLETEMANIFEST',
+    'node has EINCOMPLETEMANIFEST error')
+})
+
+t.test('unresolvable dep that is also a peer target reports the load failure, not ERESOLVE', async t => {
+  const registry = createRegistry(t, false)
+
+  const reactManifest = registry.manifest({ name: 'react', versions: ['18.2.0'] })
+  await registry.package({ manifest: reactManifest, times: 3 })
+
+  const reactDomManifest = registry.manifest({
+    name: 'react-dom',
+    packuments: [{ version: '18.2.0', peerDependencies: { react: '^18.2.0' } }],
+  })
+  await registry.package({ manifest: reactDomManifest })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: { react: '^99.0.0', 'react-dom': '18.2.0' },
+    }),
+  })
+
+  await t.rejects(buildIdeal(path), { code: 'ETARGET' })
+})
+
+t.test('unresolvable dep already placed in a peer set reports the load failure, not ERESOLVE', async t => {
+  const registry = createRegistry(t, false)
+
+  const aManifest = registry.manifest({
+    name: 'a',
+    packuments: [{ version: '1.0.0', peerDependencies: { b: '^1.0.0', x: '^1.0.0' } }],
+  })
+  await registry.package({ manifest: aManifest })
+
+  const bManifest = registry.manifest({
+    name: 'b',
+    packuments: [{ version: '1.0.0', peerDependencies: { x: '^1.0.0' } }],
+  })
+  await registry.package({ manifest: bManifest })
+
+  const xManifest = registry.manifest({ name: 'x' })
+  await registry.package({ manifest: xManifest, times: 3 })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      dependencies: { a: '1.0.0', x: '^99.0.0' },
+    }),
+  })
+
+  await t.rejects(buildIdeal(path), { code: 'ETARGET' })
+})
+
+t.test('unresolvable optional dep drops its optional peer dependent instead of ERESOLVE', async t => {
+  const registry = createRegistry(t, false)
+
+  const reactManifest = registry.manifest({ name: 'react', versions: ['18.2.0'] })
+  await registry.package({ manifest: reactManifest, times: 3 })
+
+  const reactDomManifest = registry.manifest({
+    name: 'react-dom',
+    packuments: [{ version: '18.2.0', peerDependencies: { react: '^18.2.0' } }],
+  })
+  await registry.package({ manifest: reactDomManifest })
+
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      optionalDependencies: { react: '^99.0.0', 'react-dom': '18.2.0' },
+    }),
+  })
+
+  const tree = await buildIdeal(path)
+  t.ok(tree.children.get('react').inert, 'failed react is inert')
+  t.ok(tree.children.get('react-dom').inert, 'react-dom is inert with its missing peer')
 })

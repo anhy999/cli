@@ -3,7 +3,7 @@ const Node = require('../lib/node.js')
 const Link = require('../lib/link.js')
 const Edge = require('../lib/edge.js')
 const printable = require('../lib/printable.js')
-const util = require('util')
+const util = require('node:util')
 
 t.cleanSnapshot = str => str
   // normalize paths
@@ -229,7 +229,7 @@ t.test('virtual roots are shown with their sourceReference', t => {
   t.end()
 })
 
-t.test('broken links dont break the printing', t => {
+t.test('broken links do not break the printing', t => {
   const tree = new Node({
     path: '/home/user/projects/root',
   })
@@ -290,7 +290,7 @@ t.test('show workspaces in printable node output', t => {
   t.end()
 })
 
-t.test('show bundle/shrinkwrap info', t => {
+t.test('show bundle info', t => {
   const tree = new Node({
     path: '/path/to/root',
     pkg: {
@@ -298,7 +298,6 @@ t.test('show bundle/shrinkwrap info', t => {
       version: '1.2.3',
       dependencies: {
         bundler: '',
-        wrapper: '',
         a: '1',
         b: '2',
         c: '3',
@@ -314,23 +313,6 @@ t.test('show bundle/shrinkwrap info', t => {
             a: '1',
           },
         },
-        children: [
-          {
-            pkg: { name: 'a', version: '1.2.3' },
-            integrity: 'a123',
-          },
-        ],
-      },
-      {
-        pkg: {
-          name: 'wrapper',
-          version: '1.2.3',
-          dependencies: {
-            a: '1',
-          },
-          _hasShrinkwrap: true,
-        },
-        hasShrinkwrap: true,
         children: [
           {
             pkg: { name: 'a', version: '1.2.3' },

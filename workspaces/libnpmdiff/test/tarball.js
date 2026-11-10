@@ -1,4 +1,4 @@
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 
 const t = require('tap')
 const tar = require('tar')
@@ -11,7 +11,7 @@ const tarball = require('../lib/tarball.js')
 
 const json = (obj) => `${JSON.stringify(obj, null, 2)}\n`
 
-t.test('returns a tarball from node_modules', t => {
+t.test('returns a tarball from node_modules', async t => {
   t.plan(2)
 
   const path = t.testdir({
@@ -33,22 +33,21 @@ t.test('returns a tarball from node_modules', t => {
     process.chdir(_cwd)
   })
 
-  tarball({ bin: { a: 'index.js' }, _resolved: resolve(path, 'node_modules/a') }, { where: path })
-    .then(res => {
-      tar.list({
-        filter: p => {
-          t.match(
-            p,
-            /package.json|index.js/,
-            'should return tarball with expected files'
-          )
-        },
-      })
-        .on('error', e => {
-          throw e
-        })
-        .end(res)
-    })
+  const res = await tarball(
+    { bin: { a: 'index.js' }, _resolved: resolve(path, 'node_modules/a') },
+    { where: path }
+  )
+  tar.list({
+    filter: p => {
+      t.match(
+        p,
+        /package.json|index.js/,
+        'should return tarball with expected files'
+      )
+    },
+  }).on('error', e => {
+    throw e
+  }).end(res)
 })
 
 t.test('node_modules folder within a linked dir', async t => {
@@ -93,4 +92,52 @@ t.test('pkg not in a node_modules folder', async t => {
     () => tarball({ _resolved: resolve(path, 'packages/a') }, {}),
     'should call regular pacote.tarball method instead'
   )
+})
+
+t.test('allowRemote carve-out for registry-mediated tarballs', async t => {
+  const originalTarball = pacote.tarball
+  let captured
+  pacote.tarball = async (resolved, opts) => {
+    captured = { resolved, opts }
+    return Buffer.alloc(0)
+  }
+  t.teardown(() => {
+    pacote.tarball = originalTarball
+  })
+
+  t.beforeEach(() => {
+    captured = undefined
+  })
+
+  t.test('registry-typed _from sets allowRemote=all', async t => {
+    await tarball({
+      _from: 'abbrev@1.0.0',
+      _resolved: 'https://registry.npmjs.org/abbrev/-/abbrev-1.0.0.tgz',
+    }, {})
+    t.equal(captured.opts.allowRemote, 'all')
+  })
+
+  t.test('non-registry _from leaves allowRemote untouched', async t => {
+    await tarball({
+      _from: 'https://example.com/foo.tgz',
+      _resolved: 'https://example.com/foo.tgz',
+    }, {})
+    t.notOk(captured.opts.allowRemote)
+  })
+
+  t.test('missing _from leaves allowRemote untouched', async t => {
+    await tarball({
+      _resolved: 'https://example.com/foo.tgz',
+    }, {})
+    t.notOk(captured.opts.allowRemote)
+  })
+
+  t.test('unparseable _from leaves allowRemote untouched', async t => {
+    // npa throws on tags with reserved characters, exercising the catch branch
+    await tarball({
+      _from: '@',
+      _resolved: 'https://example.com/foo.tgz',
+    }, {})
+    t.notOk(captured.opts.allowRemote)
+  })
 })

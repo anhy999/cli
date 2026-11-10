@@ -15,7 +15,7 @@ exports[`test/place-dep.js TAP placement tests accept an older transitive depend
 Array [
   Object {
     "canPlace": null,
-    "canPlaceSelf": undefined,
+    "canPlaceSelf": null,
     "checks": Map {},
     "dep": "bar@1.0.1",
     "edge": "{ node_modules/foo prod bar@1 }",
@@ -25,6 +25,43 @@ Array [
 `
 
 exports[`test/place-dep.js TAP placement tests accept an older transitive dependency > warnings 1`] = `
+Array []
+`
+
+exports[`test/place-dep.js TAP placement tests audit fix replaces a vulnerable dep with an older safe version > changes to tree 1`] = `
+--- expected
++++ actual
+@@ -20,7 +20,7 @@
+   "children": Map {
+     "a" => ArboristNode {
+       "name": "a",
+-      "version": "1.2.0",
++      "version": "1.1.0",
+       "location": "node_modules/a",
+       "path": "/some/path/node_modules/a",
+       "extraneous": true,
+
+`
+
+exports[`test/place-dep.js TAP placement tests audit fix replaces a vulnerable dep with an older safe version > placements 1`] = `
+Array [
+  Object {
+    "canPlace": Symbol(REPLACE),
+    "canPlaceSelf": Symbol(REPLACE),
+    "checks": Map {
+      "" => Array [
+        Symbol(REPLACE),
+        Symbol(REPLACE),
+      ],
+    },
+    "dep": "a@1.1.0",
+    "edge": "{ ROOT prod a@^1.0.0 }",
+    "placed": "node_modules/a",
+  },
+]
+`
+
+exports[`test/place-dep.js TAP placement tests audit fix replaces a vulnerable dep with an older safe version > warnings 1`] = `
 Array []
 `
 
@@ -3553,7 +3590,7 @@ exports[`test/place-dep.js TAP placement tests fail with ERESOLVE on deep peer d
 Array [
   Object {
     "canPlace": null,
-    "canPlaceSelf": undefined,
+    "canPlaceSelf": null,
     "checks": Map {},
     "dep": "b@2.0.0",
     "edge": "{ ROOT prod b@2 }",
@@ -6629,7 +6666,7 @@ exports[`test/place-dep.js TAP placement tests prod dep directly on conflicted p
 Array [
   Object {
     "canPlace": null,
-    "canPlaceSelf": undefined,
+    "canPlaceSelf": null,
     "checks": Map {},
     "dep": "b@2.0.0",
     "edge": "{ ROOT prod b@2 }",
@@ -8136,7 +8173,7 @@ exports[`test/place-dep.js TAP placement tests prod dep directly on conflicted p
 Array [
   Object {
     "canPlace": null,
-    "canPlaceSelf": undefined,
+    "canPlaceSelf": null,
     "checks": Map {},
     "dep": "b@1.0.0",
     "edge": "{ ROOT prod b@1 }",
@@ -10627,7 +10664,7 @@ exports[`test/place-dep.js TAP placement tests upgrade a transitive dependency >
 Array [
   Object {
     "canPlace": null,
-    "canPlaceSelf": undefined,
+    "canPlaceSelf": null,
     "checks": Map {},
     "dep": "bar@1.0.1",
     "edge": "{ node_modules/foo prod bar@1 }",

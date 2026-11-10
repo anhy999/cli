@@ -1,16 +1,19 @@
 process.env.ARBORIST_DEBUG = '0'
+
 const { Suite } = require('benchmark')
-const { relative, resolve } = require('path')
-const rimraf = require('rimraf')
-const { execSync } = require('child_process')
+const { relative, resolve } = require('node:path')
+const { mkdir, rm } = require('node:fs/promises')
+const { execSync } = require('node:child_process')
+const { linkSync, writeFileSync, readdirSync } = require('node:fs')
+const registryServer = require('../test/fixtures/server.js')
+
 const shaCmd = 'git show --no-patch --pretty=%H HEAD'
 const dirty = !!String(execSync('git status -s -uno')).trim()
 const currentSha = String(execSync(shaCmd)).trim() + (dirty ? '-dirty' : '')
-const { green, red } = require('chalk')
 const lastBenchmark = resolve(__dirname, 'benchmark/saved/last-benchmark.json')
-const mkdirp = require('mkdirp')
-const { linkSync, writeFileSync, readdirSync } = require('fs')
-const registryServer = require('../test/fixtures/registry-mocks/server.js')
+
+const red = m => `\x1B[31m${m}\x1B[39m`
+const green = m => `\x1B[32m${m}\x1B[39m`
 
 const options = {
   previous: null,
@@ -151,9 +154,9 @@ const suite = new Suite({
     }
   },
 
-  onComplete () {
-    rimraf.sync(lastBenchmark)
-    mkdirp.sync(resolve(__dirname, 'benchmark/saved'))
+  async onComplete () {
+    await rm(lastBenchmark, { recursive: true, force: true })
+    await mkdir(resolve(__dirname, 'benchmark/saved'), { recursive: true })
     // always save with sha
     const saveThis = resolve(__dirname, `benchmark/saved/${this.sha}.json`)
     const data = JSON.stringify(this.reduce((acc, bench) => {
@@ -168,12 +171,11 @@ const suite = new Suite({
     }
 
     linkSync(saveThis, lastBenchmark)
-    teardown().then(() => Promise.all([
+    await teardown()
+    await Promise.all([
       registryServer.stop(),
-      new Promise((res, rej) => {
-        rimraf(this.cache, er => er ? rej(er) : res())
-      }),
-    ]))
+      rm(this.cache, { recursive: true, force: true }),
+    ])
   },
 })
 

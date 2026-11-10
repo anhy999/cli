@@ -356,74 +356,6 @@ t.test('filtered diff', async t => {
   t.matchSnapshot(eRemovedExtraneous, 'e is removed (extraneous)')
 })
 
-t.test('diff doesnt break unchanged shrinkwrapped deps', async t => {
-  const actual = new Node({
-    name: 'a',
-    path: '/path/to/actual',
-    children: [{
-      name: 'shrinkwrapped-dep',
-      hasShrinkwrap: true,
-      integrity: 'sha512-ddd',
-      children: [
-        { name: 'shrinkwrap-inner-a', integrity: 'sha512-aaa' },
-        { name: 'shrinkwrap-inner-b', integrity: 'sha512-bbb' },
-      ],
-    }, {
-      name: 'regular-dep',
-      integrity: 'sha512-eee',
-      children: [{
-        name: 'shrinkwrapped-inner',
-        hasShrinkwrap: true,
-        integrity: 'sha512-fff',
-        children: [{
-          name: 'shrinkwrap-inner-c',
-          integrity: 'sha512-ccc',
-        }],
-      }],
-    }],
-  })
-
-  const ideal = new Node({
-    name: 'a',
-    path: '/path/to/actual',
-    children: [{
-      name: 'shrinkwrapped-dep',
-      hasShrinkwrap: true,
-      integrity: 'sha512-ddd',
-    }, {
-      name: 'regular-dep',
-      integrity: 'sha512-eee',
-      children: [{
-        name: 'shrinkwrapped-inner',
-        hasShrinkwrap: true,
-        integrity: 'sha512-fff',
-        children: [{
-          name: 'shrinkwrap-inner-c',
-          integrity: 'sha512-ccc',
-        }],
-      }],
-    }],
-  })
-
-  // putting the shrinkwrapped-inner node in the shrinkwrapInflated set
-  // allows us to fake the behavior of reifying the node and then
-  // running a second diff that includes that node's children. this
-  // is reflected by the children of the shrinkwrapped-inner node being
-  // marked as unchanged.
-  const shrinkwrappedInner = ideal.children.get('regular-dep')
-    .children.get('shrinkwrapped-inner')
-  const diff = Diff.calculate({
-    actual,
-    ideal,
-    shrinkwrapInflated: new Set([shrinkwrappedInner]),
-  })
-  t.matchSnapshot(diff, 'made no changes')
-
-  t.equal(diff.leaves.length, 1, 'diff has exactly one leaf')
-  t.match(diff.leaves[0], { action: null, ideal: { name: 'shrinkwrapped-dep' } },
-    'the shrinkwrapped dep is in the leaves with a null action')
-})
-
 t.test('extraneous pruning in workspaces', async t => {
   // just load the virtual tree here twice,
   // and then remove the extraneous ones from the 'ideal'
@@ -505,6 +437,30 @@ t.test('extraneous pruning in workspaces', async t => {
     filterNodes: [idealB, actualB],
   })
   t.matchSnapshot(pruneWsB, 'prune in workspace B')
+})
+
+t.test('a removed patch forces a CHANGE even when other metadata matches', t => {
+  const integrity = 'sha512-iWml6OqIudarD/AngxZbQoeX0QoPywHRJ2rJbCcB0l9BfL1c5+Tl433R3V+AU404jppRHZGBofm97m48yKTRiA=='
+  const resolved = 'https://registry.npmjs.org/foo/-/foo-1.0.0.tgz'
+  const build = () => new Node({
+    path: '/some/path',
+    pkg: { dependencies: { foo: '' } },
+    children: [
+      { name: 'foo', resolved, integrity, pkg: { name: 'foo', version: '1.0.0' } },
+    ],
+  })
+  const actual = build()
+
+  // identical trees produce no diff entry for foo
+  t.equal(Diff.calculate({ actual, ideal: build() }).children.length, 0)
+
+  // but a node marked patchRemoved must be re-extracted to revert its files
+  const ideal = build()
+  ideal.children.get('foo').patchRemoved = true
+  t.match(Diff.calculate({ actual, ideal }).children, [
+    { ideal: ideal.children.get('foo'), action: 'CHANGE' },
+  ])
+  t.end()
 })
 
 t.test('check versions (even if all other metadata is missing)', t => {

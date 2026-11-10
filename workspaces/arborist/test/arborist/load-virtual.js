@@ -1,6 +1,6 @@
 const Arborist = require('../../lib/arborist')
 const t = require('tap')
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 const fixture = resolve(__dirname, '../fixtures/install-types')
 const swonlyfixture = resolve(__dirname, '../fixtures/install-types-sw-only')
 const badfixture = resolve(__dirname, '../fixtures/root')
@@ -43,7 +43,7 @@ t.test('load from fixture using filesystem root path', t => {
     .then(virtualTree => t.equal(virtualTree, root))
 })
 
-t.test('load from root that already has shrinkwrap', t =>
+t.test('load from root with existing package-lock', t =>
   Shrinkwrap.load({ path: tapAndFlow }).then(meta => {
     const root = new Node({
       path: tapAndFlow,
@@ -67,19 +67,21 @@ t.test('load from cwd', t => {
 
 t.test('loading without a package-lock fails', t =>
   t.rejects(loadVirtual(badfixture), {
-    message: 'loadVirtual requires existing shrinkwrap file',
+    message: 'loadVirtual requires existing package-lock.json file',
     code: 'ENOLOCK',
   }))
 
-t.test('load from npm-shrinkwrap.json', t => {
+t.test('ignore npm-shrinkwrap.json when loading virtual tree', t => {
   const lock = require(fixture + '/package-lock.json')
   const pkg = require(fixture + '/package.json')
   const path = t.testdir({
     'npm-shrinkwrap.json': JSON.stringify(lock),
     'package.json': JSON.stringify(pkg),
   })
-  return loadVirtual(path).then(tree =>
-    t.matchSnapshot(printTree(tree), 'loaded virtual tree from fixture'))
+  return t.rejects(loadVirtual(path), {
+    message: 'loadVirtual requires existing package-lock.json file',
+    code: 'ENOLOCK',
+  })
 })
 
 t.test('load without a root package.json is fine', t => {
@@ -204,6 +206,12 @@ t.test('workspaces', t => {
     ).then(tree =>
       t.matchSnapshot(printTree(tree), 'virtual tree ignoring nested node_modules')))
 
+  t.test('load installed workspace with dependency overrides', t =>
+    loadVirtual(
+      resolve(__dirname, '../fixtures/workspaces-with-overrides')
+    ).then(tree =>
+      t.matchSnapshot(printTree(tree), 'virtual tree with overrides')))
+
   t.end()
 })
 
@@ -238,4 +246,45 @@ t.test('do not bundle the entire universe', async t => {
     'tap-yaml',
     'yaml',
   ].sort())
+})
+
+t.test('error when link target is missing', async t => {
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'root',
+      workspaces: ['packages/*'],
+    }),
+    'package-lock.json': JSON.stringify({
+      name: 'root',
+      lockfileVersion: 3,
+      packages: {
+        '': {
+          workspaces: ['packages/*'],
+        },
+        // This is the problematic entry - a link with no corresponding target
+        'node_modules/@my-scope/my-package': {
+          resolved: 'packages/some-folder/my-package',
+          link: true,
+        },
+        // Missing entry for 'packages/some-folder/my-package'
+      },
+    }),
+    packages: {
+      'some-folder': {
+        'my-package': {
+          'package.json': JSON.stringify({
+            name: '@my-scope/my-package',
+            version: '1.0.0',
+          }),
+        },
+      },
+    },
+  })
+
+  const arb = new Arborist({ path })
+
+  await t.rejects(arb.loadVirtual(), {
+    code: 'EMISSINGTARGET',
+    message: /Missing target in lock file:.*but does not exist/,
+  })
 })

@@ -1,97 +1,328 @@
-name: CI - cli
+# This file is automatically added by @npmcli/template-oss. Do not edit.
+
+name: CI
 
 on:
   workflow_dispatch:
   pull_request:
-    branches:
-      - '*'
+    paths-ignore:
+      - docs/**
+      - smoke-tests/**
+      - mock-globals/**
+      - mock-registry/**
+      - workspaces/**
   push:
     branches:
       - latest
+      - release/v*
+    paths-ignore:
+      - docs/**
+      - smoke-tests/**
+      - mock-globals/**
+      - mock-registry/**
+      - workspaces/**
+  schedule:
+    # "At 09:00 UTC (02:00 PT) on Monday" https://crontab.guru/#0_9_*_*_1
+    - cron: "0 9 * * 1"
+
+permissions:
+  contents: read
 
 jobs:
   lint:
+    name: Lint
+    if: github.repository_owner == 'npm'
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
     steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Git User
+        run: |
+          git config --global user.email "npm-cli+bot@github.com"
+          git config --global user.name "npm CLI robot"
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        id: node
         with:
-          node-version: 16.x
+          node-version: 26.x
+          check-latest: contains('26.x', '.x')
           cache: npm
-      - run: node bin/npm-cli.js run resetdeps
-      - run: node bin/npm-cli.js run lint
-
-  check_docs:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: npm
-      - run: make freshdocs
-      - run: node scripts/git-dirty.js
-
-  licenses:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: npm
-      - run: node bin/npm-cli.js run resetdeps
-      - run: node bin/npm-cli.js run licenses
-  
-  smoke-tests:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      - name: Use Node.js 16.x
-        uses: actions/setup-node@v3
-        with:
-          node-version: 16.x
-          cache: npm
-      - run: node bin/npm-cli.js run resetdeps
-      - run: node bin/npm-cli.js test -w smoke-tests --ignore-scripts
-      - name: git status
-        if: matrix.platform.os != 'windows-latest'
+      - name: Check Git Status
         run: node scripts/git-dirty.js
+      - name: Reset Deps
+        run: node scripts/resetdeps.js
+      - name: Lint
+        run: node . run lint --ignore-scripts
+      - name: Post Lint
+        run: node . run postlint --ignore-scripts
 
   test:
+    name: Test - ${{ matrix.platform.name }} - ${{ matrix.node-version }}
+    if: github.repository_owner == 'npm'
     strategy:
       fail-fast: false
       matrix:
-        node-version:
-          - 12.13.0
-          - 12.x
-          - 14.15.0
-          - 14.x
-          - 16.0.0
-          - 16.x
         platform:
-          - os: ubuntu-latest
+          - name: Linux
+            os: ubuntu-latest
             shell: bash
-          - os: macos-latest
+          - name: macOS
+            os: macos-latest
             shell: bash
-          - os: windows-latest
+          - name: macOS
+            os: macos-15-intel
+            shell: bash
+          - name: Windows
+            os: windows-latest
             shell: cmd
+        node-version:
+          - 22.22.2
+          - 22.x
+          - 24.15.0
+          - 24.x
+          - 26.0.0
+          - 26.x
+        exclude:
+          - platform: { name: macOS, os: macos-15-intel, shell: bash }
+            node-version: 22.22.2
+          - platform: { name: macOS, os: macos-15-intel, shell: bash }
+            node-version: 22.x
+          - platform: { name: macOS, os: macos-15-intel, shell: bash }
+            node-version: 24.15.0
+          - platform: { name: macOS, os: macos-15-intel, shell: bash }
+            node-version: 24.x
+          - platform: { name: macOS, os: macos-15-intel, shell: bash }
+            node-version: 26.0.0
+          - platform: { name: macOS, os: macos-15-intel, shell: bash }
+            node-version: 26.x
     runs-on: ${{ matrix.platform.os }}
     defaults:
       run:
         shell: ${{ matrix.platform.shell }}
     steps:
-    - uses: actions/checkout@v3
-    - name: Use Node.js ${{ matrix.node-version }}
-      uses: actions/setup-node@v3
-      with:
-        node-version: ${{ matrix.node-version }}
-        cache: npm
-    - run: node bin/npm-cli.js run resetdeps
-    - run: node bin/npm-cli.js run test --ignore-scripts
-    - name: git status
-      if: matrix.platform.os != 'windows-latest'
-      run: node scripts/git-dirty.js
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Git User
+        run: |
+          git config --global user.email "npm-cli+bot@github.com"
+          git config --global user.name "npm CLI robot"
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        id: node
+        with:
+          node-version: ${{ matrix.node-version }}
+          check-latest: contains(matrix.node-version, '.x')
+          cache: npm
+      - name: Check Git Status
+        run: node scripts/git-dirty.js
+      - name: Reset Deps
+        run: node scripts/resetdeps.js
+      - name: Add Problem Matcher
+        run: echo "::add-matcher::.github/matchers/tap.json"
+      - name: Test
+        run: node . test --ignore-scripts
+      - name: Check Git Status
+        run: node scripts/git-dirty.js
+
+  licenses:
+    name: Check Licenses
+    if: github.repository_owner == 'npm'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Git User
+        run: |
+          git config --global user.email "npm-cli+bot@github.com"
+          git config --global user.name "npm CLI robot"
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        id: node
+        with:
+          node-version: 26.x
+          check-latest: contains('26.x', '.x')
+          cache: npm
+      - name: Check Git Status
+        run: node scripts/git-dirty.js
+      - name: Reset Deps
+        run: node scripts/resetdeps.js
+      - name: Check Licenses
+        run: node . run licenses
+
+  smoke-tests:
+    # This cant be tested on Windows because our node_modules directory	
+    # checks in symlinks which are not supported there. This should be	
+    # fixed somehow, because this means some forms of local development	
+    # are likely broken on Windows as well.	
+    name: Smoke Tests
+    if: github.repository_owner == 'npm'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Setup Git User
+        run: |
+          git config --global user.email "npm-cli+bot@github.com"
+          git config --global user.name "npm CLI robot"
+      - name: Create Check
+        id: create-check
+        if: ${{ inputs.check-sha }}
+        uses: ./.github/actions/create-check
+        with:
+          name: "Smoke Tests"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ inputs.check-sha }}
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        id: node
+        with:
+          node-version: 26.x
+          check-latest: contains('26.x', '.x')
+          cache: npm
+      - name: Check Git Status
+        run: node scripts/git-dirty.js
+      - name: Reset Deps
+        run: node scripts/resetdeps.js
+      - name: Smoke Tests
+        run: ./scripts/smoke-tests.sh
+      - name: Conclude Check
+        uses: LouisBrunner/checks-action@v1.6.0
+        if: steps.create-check.outputs.check-id && always()
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          conclusion: ${{ job.status }}
+          check_id: ${{ steps.create-check.outputs.check-id }}
+
+  publish-dryrun:
+    # This cant be tested on Windows because our node_modules directory	
+    # checks in symlinks which are not supported there. This should be	
+    # fixed somehow, because this means some forms of local development	
+    # are likely broken on Windows as well.	
+    name: Publish Dry-Run
+    if: github.repository_owner == 'npm'
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+        with:
+          ref: ${{ inputs.ref }}
+      - name: Setup Git User
+        run: |
+          git config --global user.email "npm-cli+bot@github.com"
+          git config --global user.name "npm CLI robot"
+      - name: Create Check
+        id: create-check
+        if: ${{ inputs.check-sha }}
+        uses: ./.github/actions/create-check
+        with:
+          name: "Publish Dry-Run"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          sha: ${{ inputs.check-sha }}
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        id: node
+        with:
+          node-version: 26.x
+          check-latest: contains('26.x', '.x')
+          cache: npm
+      - name: Check Git Status
+        run: node scripts/git-dirty.js
+      - name: Reset Deps
+        run: node scripts/resetdeps.js
+      - name: Publish Dry-Run
+        run: node ./scripts/publish.js --pack-destination=$RUNNER_TEMP --smoke-publish=true
+      - name: Conclude Check
+        uses: LouisBrunner/checks-action@v1.6.0
+        if: steps.create-check.outputs.check-id && always()
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          conclusion: ${{ job.status }}
+          check_id: ${{ steps.create-check.outputs.check-id }}
+
+  windows-shims:
+    name: Windows Shims Tests
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: cmd
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+      - name: Setup Git User
+        run: |
+          git config --global user.email "npm-cli+bot@github.com"
+          git config --global user.name "npm CLI robot"
+      - name: Setup Node
+        uses: actions/setup-node@v6
+        id: node
+        with:
+          node-version: 26.x
+          check-latest: contains('26.x', '.x')
+          cache: npm
+      - name: Check Git Status
+        run: node scripts/git-dirty.js
+      - name: Reset Deps
+        run: node scripts/resetdeps.js
+      - name: Setup WSL
+        uses: Vampire/setup-wsl@v2.0.1
+      - name: Setup Cygwin
+        id: setup-cygwin
+        uses: cygwin/cygwin-install-action@v7
+        with:
+          add-to-path: 'false'
+      - name: Verify Cygwin
+        id: verify-cygwin
+        shell: pwsh
+        env:
+          CYGWIN_ROOT: ${{ steps.setup-cygwin.outputs.root }}
+        run: |
+          if (-not $env:CYGWIN_ROOT) {
+            throw 'Cygwin installer did not report its root directory'
+          }
+          & (Join-Path $env:CYGWIN_ROOT 'bin\bash.exe') --login -c 'exit 0'
+          if ($LASTEXITCODE -ne 0) {
+            throw "Cygwin bash failed with exit code $LASTEXITCODE"
+          }
+      - name: Cygwin Diagnostics
+        if: failure() && (steps.setup-cygwin.outcome == 'failure' || steps.verify-cygwin.outcome == 'failure')
+        shell: pwsh
+        env:
+          CYGWIN_ROOT: ${{ steps.setup-cygwin.outputs.root }}
+        run: |
+          Write-Output "Runner image: $env:ImageOS $env:ImageVersion"
+          if (-not $env:CYGWIN_ROOT) {
+            Write-Warning 'Cygwin installer did not report its root; check the Setup Cygwin step output'
+          } else {
+            Write-Output "Cygwin root: $env:CYGWIN_ROOT"
+            foreach ($name in @('setup.log', 'setup.log.full')) {
+              $log = Join-Path $env:CYGWIN_ROOT "var\log\$name"
+              if (Test-Path -LiteralPath $log) {
+                Write-Output "::group::$log"
+                Get-Content -LiteralPath $log -Tail 200
+                Write-Output '::endgroup::'
+              } else {
+                Write-Warning "Diagnostic log not found: $log"
+              }
+            }
+          }
+      - name: Run Windows Shims Tests
+        run: node . test --ignore-scripts -- test/bin/windows-shims.js --no-coverage
+        env:
+          WINDOWS_SHIMS_TEST: true
+          CYGWIN_ROOT: ${{ steps.setup-cygwin.outputs.root }}
+      - name: Check Git Status
+        run: node scripts/git-dirty.js

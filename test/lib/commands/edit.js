@@ -1,20 +1,34 @@
 const t = require('tap')
-const fs = require('fs')
-const path = require('path')
+const path = require('node:path')
 const tspawk = require('../../fixtures/tspawk')
 const { load: loadMockNpm } = require('../../fixtures/mock-npm')
 
-const spawk = tspawk(t)
+t.test('completion', async t => {
+  const { edit } = await loadMockNpm(t, {
+    command: 'edit',
+    prefixDir: {
+      node_modules: {
+        foo: {},
+        bar: {},
+      },
+    },
+  })
+  const res = await edit.completion({ conf: { argv: { remain: ['npm', 'edit'] } } })
+  t.match(res, ['bar', 'foo'])
+})
 
-// TODO this ... smells.  npm "script-shell" config mentions defaults but those
-// are handled by run-script, not npm.  So for now we have to tie tests to some
-// pretty specific internals of runScript
-const makeSpawnArgs = require('@npmcli/run-script/lib/make-spawn-args.js')
+const spawk = tspawk(t)
 
 const npmConfig = {
   config: {
     'ignore-scripts': false,
+    // Phase 2 gates dependency install scripts by default. `npm edit`
+    // rebuilds the edited package via `npm rebuild`, which honors the
+    // allowScripts gate, so opt every script in for these tests to exercise
+    // the editor -> rebuild -> install-script flow.
+    'dangerously-allow-all-scripts': true,
     editor: 'testeditor',
+    'script-shell': process.platform === 'win32' ? process.env.COMSPEC : 'sh',
   },
   prefixDir: {
     node_modules: {
@@ -35,53 +49,41 @@ const npmConfig = {
   },
 }
 
+const isCmdRe = /(?:^|\\)cmd(?:\.exe)?$/i
+
 t.test('npm edit', async t => {
   const { npm, joinedOutput } = await loadMockNpm(t, npmConfig)
 
   const semverPath = path.resolve(npm.prefix, 'node_modules', 'semver')
-  const [scriptShell] = makeSpawnArgs({
-    event: 'install',
-    path: npm.prefix,
-    cmd: 'testinstall',
-  })
   spawk.spawn('testeditor', [semverPath])
-  spawk.spawn(
-    scriptShell,
-    args => {
-      const lastArg = args[args.length - 1]
-      const rightExtension = lastArg.endsWith('.cmd') || lastArg.endsWith('.sh')
-      const rightFilename = path.basename(lastArg).startsWith('install')
-      const rightContents = fs.readFileSync(lastArg, { encoding: 'utf8' })
-        .trim().endsWith('testinstall')
-      return rightExtension && rightFilename && rightContents
-    },
-    { cwd: semverPath }
-  )
+
+  const scriptShell = npm.config.get('script-shell')
+  const scriptArgs = isCmdRe.test(scriptShell)
+    ? ['/d', '/s', '/c', 'testinstall']
+    : ['-c', 'testinstall']
+  spawk.spawn(scriptShell, scriptArgs, { cwd: semverPath })
+
+  const inputEvents = []
+  const inputListener = (level) => inputEvents.push(level)
+  process.on('input', inputListener)
+  t.teardown(() => process.off('input', inputListener))
+
   await npm.exec('edit', ['semver'])
   t.match(joinedOutput(), 'rebuilt dependencies successfully')
+  t.same(inputEvents.slice(0, 2), ['start', 'end'], 'progress paused and resumed around editor')
 })
 
 t.test('rebuild failure', async t => {
   const { npm } = await loadMockNpm(t, npmConfig)
+
   const semverPath = path.resolve(npm.prefix, 'node_modules', 'semver')
-  const [scriptShell] = makeSpawnArgs({
-    event: 'install',
-    path: npm.prefix,
-    cmd: 'testinstall',
-  })
   spawk.spawn('testeditor', [semverPath])
-  spawk.spawn(
-    scriptShell,
-    args => {
-      const lastArg = args[args.length - 1]
-      const rightExtension = lastArg.endsWith('.cmd') || lastArg.endsWith('.sh')
-      const rightFilename = path.basename(lastArg).startsWith('install')
-      const rightContents = fs.readFileSync(lastArg, { encoding: 'utf8' })
-        .trim().endsWith('testinstall')
-      return rightExtension && rightFilename && rightContents
-    },
-    { cwd: semverPath }
-  ).exit(1).stdout('test error')
+
+  const scriptShell = npm.config.get('script-shell')
+  const scriptArgs = isCmdRe.test(scriptShell)
+    ? ['/d', '/s', '/c', 'testinstall']
+    : ['-c', 'testinstall']
+  spawk.spawn(scriptShell, scriptArgs, { cwd: semverPath }).exit(1).stdout('test error')
   await t.rejects(
     npm.exec('edit', ['semver']),
     { message: 'command failed' }
@@ -90,8 +92,10 @@ t.test('rebuild failure', async t => {
 
 t.test('editor failure', async t => {
   const { npm } = await loadMockNpm(t, npmConfig)
+
   const semverPath = path.resolve(npm.prefix, 'node_modules', 'semver')
   spawk.spawn('testeditor', [semverPath]).exit(1).stdout('test editor failure')
+
   await t.rejects(
     npm.exec('edit', ['semver']),
     { message: 'editor process exited with code: 1' }
@@ -108,24 +112,14 @@ t.test('npm edit editor has flags', async t => {
   })
 
   const semverPath = path.resolve(npm.prefix, 'node_modules', 'semver')
-  const [scriptShell] = makeSpawnArgs({
-    event: 'install',
-    path: npm.prefix,
-    cmd: 'testinstall',
-  })
   spawk.spawn('testeditor', ['--flag', semverPath])
-  spawk.spawn(
-    scriptShell,
-    args => {
-      const lastArg = args[args.length - 1]
-      const rightExtension = lastArg.endsWith('.cmd') || lastArg.endsWith('.sh')
-      const rightFilename = path.basename(lastArg).startsWith('install')
-      const rightContents = fs.readFileSync(lastArg, { encoding: 'utf8' })
-        .trim().endsWith('testinstall')
-      return rightExtension && rightFilename && rightContents
-    },
-    { cwd: semverPath }
-  )
+
+  const scriptShell = npm.config.get('script-shell')
+  const scriptArgs = isCmdRe.test(scriptShell)
+    ? ['/d', '/s', '/c', 'testinstall']
+    : ['-c', 'testinstall']
+  spawk.spawn(scriptShell, scriptArgs, { cwd: semverPath })
+
   await npm.exec('edit', ['semver'])
 })
 

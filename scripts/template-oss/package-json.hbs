@@ -1,0 +1,14 @@
+{
+  "engines": {
+    "node":
+      {{! Set the CLI and private workspaces to the same version }}
+      {{~#if isRoot~}}
+      "^22.22.2 || ^24.15.0 || >=26.0.0"
+      {{~else~}}{{~#if isPrivate~}}
+      "^22.22.2 || ^24.15.0 || >=26.0.0"
+      {{~else~}}
+      {{! All public workspaces get this version }}
+      "^22.22.2 || ^24.15.0 || >=26.0.0"
+      {{~/if~}}{{~/if~}}
+  }
+}

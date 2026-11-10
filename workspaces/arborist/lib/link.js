@@ -1,15 +1,14 @@
-const debug = require('./debug.js')
 const relpath = require('./relpath.js')
 const Node = require('./node.js')
 const _loadDeps = Symbol.for('Arborist.Node._loadDeps')
 const _target = Symbol.for('_target')
-const { dirname } = require('path')
+const { dirname } = require('node:path')
 // defined by Node class
 const _delistFromMeta = Symbol.for('_delistFromMeta')
 const _refreshLocation = Symbol.for('_refreshLocation')
 class Link extends Node {
   constructor (options) {
-    const { root, realpath, target, parent, fsParent } = options
+    const { root, realpath, target, parent, fsParent, isStoreLink } = options
 
     if (!realpath && !(target && target.path)) {
       throw new TypeError('must provide realpath for Link node')
@@ -23,6 +22,8 @@ class Link extends Node {
       : target ? target.root
       : null),
     })
+
+    this.isStoreLink = isStoreLink || false
 
     if (target) {
       this.target = target
@@ -50,26 +51,6 @@ class Link extends Node {
   set target (target) {
     const current = this[_target]
     if (target === current) {
-      return
-    }
-
-    if (current && current.then) {
-      debug(() => {
-        throw Object.assign(new Error('cannot set target while awaiting'), {
-          path: this.path,
-          realpath: this.realpath,
-        })
-      })
-    }
-
-    if (target && target.then) {
-      // can set to a promise during an async tree build operation
-      // wait until then to assign it.
-      this[_target] = target
-      target.then(node => {
-        this[_target] = null
-        this.target = node
-      })
       return
     }
 
@@ -118,7 +99,7 @@ class Link extends Node {
     // the path/realpath guard is there for the benefit of setting
     // these things in the "wrong" order
     return this.path && this.realpath
-      ? `file:${relpath(dirname(this.path), this.realpath).replace(/#/g, '%23')}`
+      ? `file:${relpath(dirname(this.path), this.realpath)}`
       : null
   }
 
@@ -127,6 +108,17 @@ class Link extends Node {
   // deps are resolved on the target, not the Link
   // so this is a no-op
   [_loadDeps] () {}
+
+  // Forward overrides to the target only when a rule names a dep it needs, directly or transitively (npm/cli#9357, #9619).
+  recalculateOutEdgesOverrides () {
+    if (!this.target || !this.overrides) {
+      return
+    }
+    if (!overrideMatchesSubtree(this.overrides, this.target)) {
+      return
+    }
+    this.target.updateOverridesEdgeInAdded(this.overrides)
+  }
 
   // links can't have children, only their targets can
   // fix it to an empty list so that we can still call
@@ -140,6 +132,31 @@ class Link extends Node {
   get isLink () {
     return true
   }
+}
+
+// True when an override rule applies to an edge reachable from the target at any depth.
+// getEdgeRule matches on name and spec, returning the set itself when nothing applies, so a non-applicable version-qualified rule doesn't flip an intermediate node to "has overrides" (npm/cli#9357).
+// Not a method: runs from the Node super-constructor, before subclass private methods exist.
+const overrideMatchesSubtree = (overrides, target) => {
+  const seen = new Set()
+  const stack = [target]
+  while (stack.length) {
+    const node = stack.pop()
+    const resolved = node.isLink ? node.target : node
+    if (seen.has(resolved)) {
+      continue
+    }
+    seen.add(resolved)
+    for (const edge of resolved.edgesOut.values()) {
+      if (overrides.getEdgeRule(edge).name === edge.name) {
+        return true
+      }
+      if (edge.to) {
+        stack.push(edge.to)
+      }
+    }
+  }
+  return false
 }
 
 module.exports = Link

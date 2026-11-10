@@ -5,18 +5,18 @@ around.
 
 They're untested (or, in some sense, some of them _are_ tests, albeit ad
 hoc ones for use when figuring out what a thing should even be), and really
-moroe like spikes or examples than anything dependable or useful.
+more like spikes or examples than anything dependable or useful.
 
 At some point it would be good to gather up some of this and turn it into a
 proper `arb` executable.
 
 * `actual.js` - Load the metadata about the modules on disk, and print
   it out nicely.  First argument is the path to load, defaults to `cwd`.
-* `virtual.js` - Load the metadata from `npm-shrinkwrap.json`,
-    `package-lock.json`, and/or `yarn-lock.json`, and print it out nicely.
+* `virtual.js` - Load the metadata from `package-lock.json` and/or
+    `yarn-lock.json`, and print it out nicely.
     First argument is the path to load, defaults to `cwd`.
-* `ideal.js` - Build the ideal tree from `package.json` and/or shrinkwrap
-    and lockfile metadata.  First argument is the path to load, defaults to
+* `ideal.js` - Build the ideal tree from `package.json` and/or lockfile
+    metadata.  First argument is the path to load, defaults to
     `cwd`.  You may also specify the following options:
     * `--quiet` - Do not print the result,
     * `--prefer-dedupe` - Prefer to deduplicate the tree rather than

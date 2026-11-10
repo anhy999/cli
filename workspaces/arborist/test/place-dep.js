@@ -33,20 +33,18 @@ t.test('placement tests', t => {
       preferDedupe = false,
       // --force set?
       force = false,
-      // is this the thing the user is explicitly installing?
+      // is this the thing that the user is explicitly installing?
       explicitRequest,
       // the names passed to `npm update foo bar baz` for example.
       updateNames = [],
       // an audit report, telling us which nodes are vulnerable
       auditReport = null,
-      // --legacy-bundling set?
-      legacyBundling = false,
       // --strict-peer-deps set?
       strictPeerDeps = false,
       // --legacy-peer-deps set?
       legacyPeerDeps = false,
       // installing with --global or --global-style?
-      globalStyle = false,
+      installStrategy = 'hoisted',
     } = options
 
     const node = tree.inventory.get(nodeLoc)
@@ -80,10 +78,9 @@ t.test('placement tests', t => {
         explicitRequest,
         updateNames,
         auditReport,
-        legacyBundling,
         strictPeerDeps,
         legacyPeerDeps,
-        globalStyle,
+        installStrategy,
       })
     }
 
@@ -130,7 +127,7 @@ t.test('placement tests', t => {
       try {
         pd = place()
       } catch (er) {
-        console.error(require('util').inspect(er, { depth: Infinity }))
+        console.error(require('node:util').inspect(er, { depth: Infinity }))
         throw er
       }
       process.removeListener('log', onwarn)
@@ -271,7 +268,7 @@ t.test('placement tests', t => {
     }),
     dep: new Node({ pkg: { name: 'bar', version: '1.0.0' } }),
     nodeLoc: 'node_modules/foo',
-    legacyBundling: true,
+    installStrategy: 'nested',
     test: (t, tree) => {
       const foobar = tree.children.get('foo').resolve('bar')
       t.equal(foobar.location, 'node_modules/foo/node_modules/bar')
@@ -291,7 +288,7 @@ t.test('placement tests', t => {
     }),
     dep: new Node({ pkg: { name: 'bar', version: '1.0.0' } }),
     nodeLoc: 'node_modules/foo',
-    globalStyle: true,
+    installStrategy: 'shallow',
     test: (t, tree) => {
       const foobar = tree.children.get('foo').resolve('bar')
       t.equal(foobar.location, 'node_modules/foo/node_modules/bar')
@@ -323,7 +320,7 @@ t.test('placement tests', t => {
     }),
     dep: new Node({ pkg: { name: 'baz', version: '1.0.0' } }),
     nodeLoc: 'node_modules/foo/node_modules/bar',
-    globalStyle: true,
+    installStrategy: 'shallow',
     test: (t, tree) => {
       const foobar = tree.children.get('foo').resolve('bar')
       const foobarbaz = foobar.resolve('baz')
@@ -484,6 +481,27 @@ t.test('placement tests', t => {
       t.equal(z.version, '2.1.0')
       const k = tree.inventory.get('k')
       t.equal(k.children.size, 0, 'children of fsChild all deduped out')
+    },
+  })
+
+  runTest('audit fix replaces a vulnerable dep with an older safe version', {
+    tree: new Node({
+      path,
+      pkg: {
+        name: 'project',
+        version: '1.0.0',
+        dependencies: { a: '^1.0.0' },
+      },
+      children: [{ pkg: { name: 'a', version: '1.2.0' } }],
+    }),
+    nodeLoc: '',
+    dep: new Node({ pkg: { name: 'a', version: '1.1.0' } }),
+    auditReport: {
+      isVulnerable: node => node.name === 'a' && node.version === '1.2.0',
+    },
+    test: (t, tree) => {
+      t.equal(tree.children.get('a').version, '1.1.0',
+        'installed the older non-vulnerable candidate')
     },
   })
 
@@ -1519,7 +1537,7 @@ t.test('placement tests', t => {
     nodeLoc: '',
   })
 
-  // same as above, but now the existing one has 3, replacment has 5
+  // same as above, but now the existing one has 3, replacement has 5
   // v@4 -> PEER(a@1||2)
   // y@1 -> PEER(d@1)
   // a@1 -> PEER(b@1)

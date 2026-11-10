@@ -1,9 +1,15 @@
-const { fixer } = require('normalize-package-data')
 const npmFetch = require('npm-registry-fetch')
 const npa = require('npm-package-arg')
+const PackageJson = require('@npmcli/package-json')
+const { log } = require('proc-log')
 const semver = require('semver')
-const { URL } = require('url')
+const { URL } = require('node:url')
 const ssri = require('ssri')
+const ciInfo = require('ci-info')
+
+const { generateProvenance, verifyProvenance } = require('./provenance')
+
+const TLOG_BASE_URL = 'https://search.sigstore.dev/'
 
 const publish = async (manifest, tarballData, opts) => {
   if (manifest.private) {
@@ -14,19 +20,26 @@ Remove the 'private' field from the package.json to publish it.`),
     )
   }
 
+  // packageExtensions is root-only project policy and must never reach the registry manifest or the published tarball
+  if (manifest.packageExtensions !== undefined) {
+    throw Object.assign(
+      new Error('packageExtensions is only honored at the project root and must not be published.'),
+      { code: 'EPACKAGEEXTENSIONS' }
+    )
+  }
+
   // spec is used to pick the appropriate registry/auth combo
   const spec = npa.resolve(manifest.name, manifest.version)
   opts = {
-    defaultTag: 'latest',
-    // if scoped, restricted by default
-    access: spec.scope ? 'restricted' : 'public',
+    access: null,
     algorithms: ['sha512'],
+    defaultTag: 'latest',
     ...opts,
     spec,
   }
 
   const reg = npmFetch.pickRegistry(spec, opts)
-  const pubManifest = patchManifest(manifest, opts)
+  const pubManifest = await patchManifest(manifest, opts)
 
   // registry-frontdoor cares about the access level,
   // which is only configurable for scoped packages
@@ -37,48 +50,43 @@ Remove the 'private' field from the package.json to publish it.`),
     )
   }
 
-  const metadata = buildMetadata(reg, pubManifest, tarballData, opts)
+  const { metadata, transparencyLogUrl } = await buildMetadata(
+    reg,
+    pubManifest,
+    tarballData,
+    spec,
+    opts
+  )
 
-  try {
-    return await npmFetch(spec.escapedName, {
-      ...opts,
-      method: 'PUT',
-      body: metadata,
-      ignoreBody: true,
-    })
-  } catch (err) {
-    if (err.code !== 'E409') {
-      throw err
-    }
-    // if E409, we attempt exactly ONE retry, to protect us
-    // against malicious activity like trying to publish
-    // a bunch of new versions of a package at the same time
-    // and/or spamming the registry
-    const current = await npmFetch.json(spec.escapedName, {
-      ...opts,
-      query: { write: true },
-    })
-    const newMetadata = patchMetadata(current, metadata)
-    return npmFetch(spec.escapedName, {
-      ...opts,
-      method: 'PUT',
-      body: newMetadata,
-      ignoreBody: true,
-    })
+  const stageRoute = `/-/stage/package/${spec.escapedName}`
+  const res = await npmFetch(opts.stage ? stageRoute : spec.escapedName, {
+    ...opts,
+    method: opts.stage ? 'POST' : 'PUT',
+    body: metadata,
+    ignoreBody: !opts.stage,
+  })
+  if (transparencyLogUrl) {
+    res.transparencyLogUrl = transparencyLogUrl
   }
+  if (opts.stage) {
+    const json = await res.json()
+    res.stageId = json.stageId
+  }
+  return res
 }
 
-const patchManifest = (_manifest, opts) => {
+const patchManifest = async (_manifest, opts) => {
   const { npmVersion } = opts
-  // we only update top-level fields, so a shallow clone is fine
-  const manifest = { ..._manifest }
-
-  manifest._nodeVersion = process.versions.node
-  if (npmVersion) {
-    manifest._npmVersion = npmVersion
+  const steps = ['fixName']
+  const manifestInput = { ..._manifest, _nodeVersion: process.versions.node }
+  if (npmVersion != null) {
+    manifestInput._npmVersion = npmVersion
   }
+  const manifest = await new PackageJson()
+    .fromContent(manifestInput)
+    .normalize({ steps })
+    .then(p => p.content)
 
-  fixer.fixNameField(manifest, { strict: true, allowLegacyCase: true })
   const version = semver.clean(manifest.version)
   if (!version) {
     throw Object.assign(
@@ -87,11 +95,13 @@ const patchManifest = (_manifest, opts) => {
     )
   }
   manifest.version = version
+  // patchedDependencies is consumer-side state and must never be published
+  delete manifest.patchedDependencies
   return manifest
 }
 
-const buildMetadata = (registry, manifest, tarballData, opts) => {
-  const { access, defaultTag, algorithms } = opts
+const buildMetadata = async (registry, manifest, tarballData, spec, opts) => {
+  const { access, defaultTag, algorithms, provenance, provenanceFile, command = 'publish' } = opts
   const root = {
     _id: manifest.name,
     name: manifest.name,
@@ -106,6 +116,7 @@ const buildMetadata = (registry, manifest, tarballData, opts) => {
   root['dist-tags'][tag] = manifest.version
 
   const tarballName = `${manifest.name}-${manifest.version}.tgz`
+  const provenanceBundleName = `${manifest.name}-${manifest.version}.sigstore`
   const tarballURI = `${manifest.name}/-/${tarballName}`
   const integrity = ssri.fromData(tarballData, {
     algorithms: [...new Set(['sha1'].concat(algorithms))],
@@ -131,52 +142,106 @@ const buildMetadata = (registry, manifest, tarballData, opts) => {
     length: tarballData.length,
   }
 
-  return root
-}
-
-const patchMetadata = (current, newData) => {
-  const curVers = Object.keys(current.versions || {})
-    .map(v => semver.clean(v, true))
-    .concat(Object.keys(current.time || {})
-      .map(v => semver.valid(v, true) && semver.clean(v, true))
-      .filter(v => v))
-
-  const newVersion = Object.keys(newData.versions)[0]
-
-  if (curVers.indexOf(newVersion) !== -1) {
-    const { name: pkgid, version } = newData
+  // Handle case where --provenance flag was set to true
+  let transparencyLogUrl
+  if (provenance === true && provenanceFile) {
     throw Object.assign(
-      new Error(
-        `Cannot publish ${pkgid}@${version} over existing version.`
-      ), {
-        code: 'EPUBLISHCONFLICT',
-        pkgid,
-        version,
-      })
+      new Error('provenance and provenanceFile cannot be used together'),
+      { code: 'EUSAGE' }
+    )
   }
+  if (provenance === true || provenanceFile) {
+    let provenanceBundle
+    const subject = {
+      name: npa.toPurl(spec),
+      digest: { sha512: integrity.sha512[0].hexDigest() },
+    }
 
-  current.versions = current.versions || {}
-  current.versions[newVersion] = newData.versions[newVersion]
-  for (const i in newData) {
-    switch (i) {
-      // objects that copy over the new stuffs
-      case 'dist-tags':
-      case 'versions':
-      case '_attachments':
-        for (const j in newData[i]) {
-          current[i] = current[i] || {}
-          current[i][j] = newData[i][j]
-        }
-        break
+    if (provenance === true) {
+      await ensureProvenanceGeneration(registry, spec, opts)
+      provenanceBundle = await generateProvenance([subject], opts)
 
-      // copy
-      default:
-        current[i] = newData[i]
-        break
+      /* eslint-disable-next-line max-len */
+      log.notice(command, `Signed provenance statement with source and build information from ${ciInfo.name}`)
+
+      const tlogEntry = provenanceBundle?.verificationMaterial?.tlogEntries[0]
+      /* istanbul ignore else */
+      if (tlogEntry) {
+        transparencyLogUrl = `${TLOG_BASE_URL}?logIndex=${tlogEntry.logIndex}`
+        log.notice(
+          command,
+          `Provenance statement published to transparency log: ${transparencyLogUrl}`
+        )
+      }
+    } else {
+      provenanceBundle = await verifyProvenance(subject, provenanceFile)
+    }
+
+    const serializedBundle = JSON.stringify(provenanceBundle)
+    root._attachments[provenanceBundleName] = {
+      content_type: provenanceBundle.mediaType,
+      data: serializedBundle,
+      length: serializedBundle.length,
     }
   }
 
-  return current
+  return {
+    metadata: root,
+    transparencyLogUrl,
+  }
+}
+
+// Check that all the prereqs are met for provenance generation
+const ensureProvenanceGeneration = async (registry, spec, opts) => {
+  if (ciInfo.GITHUB_ACTIONS) {
+    // Ensure that the GHA OIDC token is available
+    if (!process.env.ACTIONS_ID_TOKEN_REQUEST_URL) {
+      throw Object.assign(
+        /* eslint-disable-next-line max-len */
+        new Error('Provenance generation in GitHub Actions requires "write" access to the "id-token" permission'),
+        { code: 'EUSAGE' }
+      )
+    }
+  } else if (ciInfo.GITLAB) {
+    // Ensure that the Sigstore OIDC token is available
+    if (!process.env.SIGSTORE_ID_TOKEN) {
+      throw Object.assign(
+        /* eslint-disable-next-line max-len */
+        new Error('Provenance generation in GitLab CI requires "SIGSTORE_ID_TOKEN" with "sigstore" audience to be present in "id_tokens". For more info see:\nhttps://docs.gitlab.com/ee/ci/secrets/id_token_authentication.html'),
+        { code: 'EUSAGE' }
+      )
+    }
+  } else {
+    throw Object.assign(
+      new Error('Automatic provenance generation not supported for provider: ' + ciInfo.name),
+      { code: 'EUSAGE' }
+    )
+  }
+
+  // Some registries (e.g. GH packages) require auth to check visibility,
+  // and always return 404 when no auth is supplied. In this case we assume
+  // the package is always private and require `--access public` to publish
+  // with provenance.
+  let visibility = { public: false }
+  if (opts.access !== 'public') {
+    try {
+      const res = await npmFetch
+        .json(`/-/package/${spec.escapedName}/visibility`, { ...opts, registry })
+      visibility = res
+    } catch (err) {
+      if (err.code !== 'E404') {
+        throw err
+      }
+    }
+  }
+
+  if (!visibility.public && opts.provenance === true && opts.access !== 'public') {
+    throw Object.assign(
+      /* eslint-disable-next-line max-len */
+      new Error("Can't generate provenance for new or private package, you must set `access` to public."),
+      { code: 'EUSAGE' }
+    )
+  }
 }
 
 module.exports = publish

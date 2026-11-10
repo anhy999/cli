@@ -1,7 +1,8 @@
 #!/usr/bin/env node
 
-const fs = require('fs')
-const path = require('path')
+const fs = require('node:fs')
+const path = require('node:path')
+const { time } = require('proc-log')
 
 const { bin, arb: options } = require('./lib/options')
 const version = require('../package.json').version
@@ -19,8 +20,7 @@ ${message && '\n' + message + '\n'}
   * prune: prune the ideal tree and reify (like npm prune)
   * ideal: generate and print the ideal tree
   * actual: read and print the actual tree in node_modules
-  * virtual: read and print the virtual tree in the local shrinkwrap file
-  * shrinkwrap: load a local shrinkwrap and print its data
+  * virtual: read and print the virtual tree in the local package-lock.json
   * audit: perform a security audit on project dependencies
   * funding: query funding information in the local package tree.  A second
     positional argument after the path name can limit to a package name.
@@ -36,7 +36,7 @@ ${message && '\n' + message + '\n'}
 
   Additionally:
 
-  * --loglevel=warn|--quiet will supppress the printing of package trees
+  * --loglevel=warn|--quiet will suppress the printing of package trees
   * --logfile <file|bool> will output logs to a file
   * --timing will show timing information
   * Instead of 'npm install <pkg>', use 'arborist reify --add=<pkg>'.
@@ -72,11 +72,11 @@ for (const file of commandFiles) {
 
     log.info(name, options)
 
-    process.emit('time', totalTime)
-    process.emit('time', scriptTime)
+    const timeEnd = time.start(totalTime)
+    const scriptEnd = time.start(scriptTime)
 
     return command(options, (result) => {
-      process.emit('timeEnd', scriptTime)
+      scriptEnd()
       return {
         result,
         timing: {
@@ -95,10 +95,11 @@ for (const file of commandFiles) {
         return err
       })
       .then((r) => {
-        process.emit('timeEnd', totalTime)
+        timeEnd()
         if (bin.loglevel !== 'silent') {
           console[process.exitCode ? 'error' : 'log'](r)
         }
+        return r
       })
   }
 }

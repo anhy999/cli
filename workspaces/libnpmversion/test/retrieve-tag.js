@@ -3,7 +3,7 @@ const requireInject = require('require-inject')
 let tag
 const retrieveTag = requireInject('../lib/retrieve-tag.js', {
   '@npmcli/git': {
-    spawn: async (cmd, opts) => ({ stdout: tag + '\n' }),
+    spawn: async () => ({ stdout: tag + '\n' }),
   },
 })
 
@@ -17,4 +17,9 @@ t.test('not a valid semver tag', t => {
 t.test('yes a valid semver tag', async t => {
   tag = 'this is a version tho: Release-1.2.3 candidate'
   t.equal(await retrieveTag(), '1.2.3')
+})
+
+t.test('yes a valid semver pre-release tag', async t => {
+  tag = 'this is a prerelease version tho: Release-1.2.3-pre.1 candidate'
+  t.equal(await retrieveTag(), '1.2.3-pre.1')
 })

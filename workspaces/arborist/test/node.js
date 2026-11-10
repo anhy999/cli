@@ -1,10 +1,10 @@
-const util = require('util')
+const util = require('node:util')
 const t = require('tap')
 const Node = require('../lib/node.js')
 const OverrideSet = require('../lib/override-set.js')
 const Link = require('../lib/link.js')
 const Shrinkwrap = require('../lib/shrinkwrap.js')
-const { resolve } = require('path')
+const { resolve } = require('node:path')
 const treeCheck = require('../lib/tree-check.js')
 
 const { normalizePath, normalizePaths } = require('./fixtures/utils.js')
@@ -533,7 +533,7 @@ t.test('load with a virtual filesystem parent', t => {
 
   t.equal(normalizePath(packages.path), normalizePath(root.realpath + '/link-target/packages'))
   t.equal(normalizePath(target3.path), normalizePath(root.realpath + '/link-target/packages/link3'))
-  t.equal(link3.target, target3, 'still targetting the right node 4')
+  t.equal(link3.target, target3, 'still targeting the right node 4')
   t.equal(target3.fsParent, packages, 'link3 target under packages')
   t.equal(normalizePath(link3.realpath), normalizePath(target3.path), 'link realpath updated')
 
@@ -838,6 +838,32 @@ t.test('bundled dependencies logic', t => {
   t.end()
 })
 
+t.test('getBundler preserves explicit array traversal state', t => {
+  const root = new Node({
+    path: '/path/to/root',
+    pkg: {
+      name: 'root',
+      dependencies: { a: '*' },
+      bundleDependencies: ['a'],
+    },
+  })
+  const a = new Node({
+    parent: root,
+    pkg: { name: 'a', version: '1.0.0' },
+  })
+  const visited = []
+  t.equal(a.getBundler(visited), root)
+  t.same(visited, [a, root], 'populates the caller-provided array')
+  t.equal(a.getBundler(visited), null, 'honors nodes already visited')
+  t.same(visited, [a, root], 'does not append already visited nodes')
+  t.equal(a.getBundler(), root, 'default calls have independent traversal state')
+
+  const duplicates = [root, root]
+  t.equal(a.getBundler(duplicates), root)
+  t.same(duplicates, [root, root, a], 'preserves existing array contents and order')
+  t.end()
+})
+
 t.test('move fsChildren when moving to a new fsParent in same root', t => {
   const root = new Node({
     path: '/path/to/root',
@@ -1016,43 +1042,6 @@ t.test('setting package refreshes deps', t => {
   t.end()
 })
 
-t.test('nodes in shrinkwraps', t => {
-  const root = new Node({
-    pkg: { dependencies: { a: '' } },
-    path: '/path/to/root',
-    children: [
-      {
-        name: 'a',
-        pkg: {
-          name: 'a',
-          version: '1.2.3',
-          dependencies: { b: '' },
-          _hasShrinkwrap: true,
-        },
-        children: [
-          {
-            name: 'b',
-            pkg: {
-              version: '1.2.3',
-              name: 'b',
-              dependencies: { c: '' },
-            },
-            children: [{ name: 'c', pkg: { name: 'c', version: '1.2.3' } }],
-          },
-        ],
-      },
-    ],
-  })
-  const a = root.children.get('a')
-  const b = a.children.get('b')
-  const c = b.children.get('c')
-
-  t.equal(a.hasShrinkwrap, true, 'a has a shrinkwrap')
-  t.equal(b.inShrinkwrap, true, 'b is in shrinkwrap')
-  t.equal(c.inShrinkwrap, true, 'c is in shrinkwrap')
-  t.end()
-})
-
 t.test('bin paths', t => {
   const root = new Node({
     path: '/a/b/c',
@@ -1072,7 +1061,7 @@ t.test('bin paths', t => {
     realpath: root.path + '/d/e/f',
   })
 
-  const { resolve: r } = require('path')
+  const { resolve: r } = require('node:path')
 
   t.strictSame(root.binPaths, [])
   t.strictSame(link.binPaths, [
@@ -1112,6 +1101,54 @@ t.test('bin paths', t => {
   t.end()
 })
 
+t.test('bin paths normalize traversal-bearing names', t => {
+  const bin = {
+    '../../../sentinel': 'bin/traversal.js',
+    '/tmp/absolute': 'bin/absolute.js',
+    '..\\..\\windows': 'bin/windows.js',
+    'C:\\outside\\drive': 'bin/drive.js',
+    invalid: 123,
+  }
+  const root = new Node({
+    path: '/a/b/c',
+    children: [
+      { pkg: { name: 'evil', bin } },
+    ],
+  })
+  const { resolve: r } = require('node:path')
+
+  t.strictSame(root.children.get('evil').binPaths, [
+    r('/a/b/c/node_modules/.bin/sentinel'),
+    ...(process.platform !== 'win32' ? [] : [
+      r('/a/b/c/node_modules/.bin/sentinel.cmd'),
+      r('/a/b/c/node_modules/.bin/sentinel.ps1'),
+    ]),
+    r('/a/b/c/node_modules/.bin/absolute'),
+    ...(process.platform !== 'win32' ? [] : [
+      r('/a/b/c/node_modules/.bin/absolute.cmd'),
+      r('/a/b/c/node_modules/.bin/absolute.ps1'),
+    ]),
+    r('/a/b/c/node_modules/.bin/windows'),
+    ...(process.platform !== 'win32' ? [] : [
+      r('/a/b/c/node_modules/.bin/windows.cmd'),
+      r('/a/b/c/node_modules/.bin/windows.ps1'),
+    ]),
+    r('/a/b/c/node_modules/.bin/drive'),
+    ...(process.platform !== 'win32' ? [] : [
+      r('/a/b/c/node_modules/.bin/drive.cmd'),
+      r('/a/b/c/node_modules/.bin/drive.ps1'),
+    ]),
+  ])
+  t.strictSame(bin, {
+    '../../../sentinel': 'bin/traversal.js',
+    '/tmp/absolute': 'bin/absolute.js',
+    '..\\..\\windows': 'bin/windows.js',
+    'C:\\outside\\drive': 'bin/drive.js',
+    invalid: 123,
+  }, 'does not mutate package metadata')
+  t.end()
+})
+
 t.test('binPaths, but global', t => {
   const root = new Node({
     global: true,
@@ -1131,7 +1168,7 @@ t.test('binPaths, but global', t => {
     realpath: root.path + '/d/e/f',
   })
 
-  const { resolve: r } = require('path')
+  const { resolve: r } = require('node:path')
 
   t.strictSame(root.binPaths, [])
   t.strictSame(link.binPaths, process.platform === 'win32'
@@ -1322,7 +1359,7 @@ t.test('replace workspaces keeping existing edges out', t => {
   t.end()
 })
 
-t.test('dont rely on legacy _resolved for file: nodes', async t => {
+t.test('do not rely on legacy _resolved for file: nodes', async t => {
   const old = new Node({
     pkg: {
       _resolved: 'file:/x/y/z/blorg.tgz',
@@ -2242,7 +2279,7 @@ t.test('virtual references to root node has devDep edges', async t => {
   t.equal(virtualRoot.edgesOut.get('a').type, 'dev')
 })
 
-t.test('globaTop set for children of global link root target', async t => {
+t.test('globalTop set for children of global link root target', async t => {
   const root = new Link({
     path: '/usr/local/lib',
     realpath: '/data/lib',
@@ -2365,7 +2402,7 @@ t.test('canDedupe()', t => {
   |   +-- a 1.2.3 (removable, matches)
   +-- extraneous 1.2.3
   +-- wrapper
-      +-- a 1.2.3 (not removable, in shrinkwrap)
+      +-- a 1.2.3 (removable, matches root a)
   */
 
   const root = new Node({
@@ -2405,9 +2442,7 @@ t.test('canDedupe()', t => {
           dependencies: {
             a: '1',
           },
-          _hasShrinkwrap: true,
         },
-        hasShrinkwrap: true,
         children: [
           {
             pkg: { name: 'a', version: '1.2.3' },
@@ -2480,6 +2515,7 @@ t.test('canDedupe()', t => {
   const canDedupeLocs = [...root.inventory.filter(n => n.canDedupe())]
     .map(n => n.location)
   t.match(canDedupeLocs, [
+    'node_modules/wrapper/node_modules/a',
     'node_modules/c/node_modules/a',
     'node_modules/b/node_modules/e',
     'node_modules/b/node_modules/c/node_modules/a/node_modules/e',
@@ -2488,6 +2524,7 @@ t.test('canDedupe()', t => {
   const canDedupeTrueLocs = [...root.inventory.filter(n => n.canDedupe(true))]
     .map(n => n.location)
   t.match(canDedupeTrueLocs, [
+    'node_modules/wrapper/node_modules/a',
     'node_modules/c/node_modules/a',
     // this is the one that's only deduped if we preferDedupe
     'node_modules/b/node_modules/a',
@@ -2519,6 +2556,43 @@ t.test('canDedupe()', t => {
   t.equal(top.fsTop, root)
   t.equal(top.children.get('a').isFsTop, true)
 
+  t.end()
+})
+
+t.test('canDedupe returns true when explicitRequest is true regardless of other conditions', t => {
+  // Create a minimal tree with a valid resolveParent
+  const root = new Node({
+    pkg: { name: 'root', version: '1.0.0' },
+    path: '/root',
+    realpath: '/root',
+  })
+
+  // Create a duplicate candidate node in the tree
+  const duplicate = new Node({
+    pkg: { name: 'dup', version: '1.0.0' },
+    parent: root,
+  })
+
+  // Create a node with the same name but a higher version so that normally dedupe would not occur
+  const node = new Node({
+    pkg: { name: 'dup', version: '2.0.0' },
+    parent: duplicate,
+  })
+
+  // Manually add an incoming edge so that node.edgesIn is non-empty
+  node.edgesIn.add({
+    from: duplicate,
+    satisfiedBy () {
+      return true
+    },
+  })
+
+  const preferDedupe = false
+  let explicitRequest = false
+  t.notOk(node.canDedupe(preferDedupe, explicitRequest), 'without explicit request, dedupe is not allowed')
+
+  explicitRequest = true
+  t.ok(node.canDedupe(preferDedupe, explicitRequest), 'explicit request forces dedupe to return true')
   t.end()
 })
 
@@ -2728,6 +2802,137 @@ t.test('overrides', (t) => {
     t.end()
   })
 
+  t.test('node.overridden is true when an override applies to a specific node', async (t) => {
+    const tree = new Node({
+      loadOverrides: true,
+      path: '/some/path',
+      pkg: {
+        name: 'foo',
+        dependencies: {
+          bar: '^1',
+        },
+        overrides: {
+          baz: '1.0.0',
+        },
+      },
+      children: [{
+        name: 'bar',
+        version: '1.0.0',
+        pkg: {
+          dependencies: {
+            baz: '2.0.0',
+          },
+        },
+        children: [{
+          name: 'baz',
+          version: '1.0.0',
+          pkg: {
+            version: '1.0.0',
+            dependencies: {
+              buzz: '1.0.0',
+            },
+          },
+          children: [{
+            name: 'buzz',
+            version: '1.0.0',
+            pkg: {},
+          }],
+        }],
+      }],
+    })
+
+    const bar = tree.edgesOut.get('bar').to
+    t.not(bar.overridden, 'bar was not overridden')
+    const baz = bar.edgesOut.get('baz').to
+    t.ok(baz.overridden, 'baz was overridden')
+    const buzz = baz.edgesOut.get('buzz').to
+    t.not(buzz.overridden, 'buzz was not overridden')
+  })
+
+  t.test('node.overridden is false when an override does not match the node version', async (t) => {
+    const tree = new Node({
+      loadOverrides: true,
+      path: '/some/path',
+      pkg: {
+        name: 'foo',
+        dependencies: {
+          bar: '^1',
+        },
+        overrides: {
+          baz: '1.0.0', // Override specifies "1.0.0"
+        },
+      },
+      children: [{
+        name: 'bar',
+        version: '1.0.0',
+        pkg: {
+          dependencies: {
+            baz: '2.0.0',
+          },
+        },
+        children: [{
+          name: 'baz',
+          version: '3.0.0',
+          pkg: {
+            version: '3.0.0', // This does NOT match the override!
+            dependencies: {
+              buzz: '1.0.0',
+            },
+          },
+          children: [{
+            name: 'buzz',
+            version: '1.0.0',
+            pkg: {},
+          }],
+        }],
+      }],
+    })
+
+    const bar = tree.edgesOut.get('bar').to
+    t.not(bar.overridden, 'bar was not overridden')
+
+    const baz = bar.edgesOut.get('baz').to
+    t.not(baz.overridden, 'baz was not overridden because version mismatch')
+
+    const buzz = baz.edgesOut.get('buzz').to
+    t.not(buzz.overridden, 'buzz was not overridden')
+  })
+
+  t.test('node.overridden returns false when an incoming edge override equals its source override', t => {
+    const baseOverride = new OverrideSet({
+      overrides: {
+        foo: 'bar',
+      },
+    })
+    baseOverride.name = 'test-package'
+    baseOverride.value = '1.0.0'
+
+    const node = new Node({
+      pkg: { name: 'test-package', version: '1.0.0' },
+      path: '/some/path/test-package',
+      realpath: '/some/path/test-package',
+      overrides: baseOverride,
+    })
+
+    const equalOverride = new OverrideSet({
+      overrides: {
+        foo: 'bar',
+      },
+    })
+    equalOverride.name = 'test-package'
+    equalOverride.value = '1.0.0'
+
+    const fakeEdge = {
+      overrides: equalOverride,
+      from: { overrides: baseOverride },
+    }
+
+    node.edgesIn.add(fakeEdge)
+
+    t.equal(node.overridden, false, 'node.overridden returns false when edge.override equals edge.from.override')
+    t.end()
+  })
+
   t.test('assertRootOverrides throws when a dependency and override conflict', async (t) => {
     const conflictingTree = new Node({
       loadOverrides: true,
@@ -2836,18 +3041,17 @@ t.test('overrides', (t) => {
     t.notOk(root.edgesOut.get('foo').valid, 'foo edge is not valid')
     t.notOk(foo.edgesOut.get('bar').valid, 'bar edge is not valid')
 
-    // we add bar to the root first, this is deliberate so that we don't have a simple
-    // linear inheritance. we'll add foo later and make sure that both edges and nodes
-    // become valid after that
-
+    // Attach bar to root. This does not trigger override propagation because
+    // bar is not connected via a dependency edge.
     bar.root = root
-    t.ok(bar.overrides, 'bar now has overrides')
+    t.notOk(bar.overrides, 'bar still does not have overrides until connected by a dependency edge')
     t.notOk(foo.edgesOut.get('bar').valid, 'bar edge is not valid yet')
 
+    // Now attach foo to root so that it is connected as a dependency.
     foo.root = root
     t.ok(foo.overrides, 'foo now has overrides')
     t.ok(root.edgesOut.get('foo').valid, 'foo edge is now valid')
-    t.ok(bar.overrides, 'bar still has overrides')
+    t.ok(bar.overrides, 'bar now has overrides after foo is attached')
     t.ok(foo.edgesOut.get('bar').valid, 'bar edge is now valid')
   })
 
@@ -2869,7 +3073,7 @@ t.test('overrides', (t) => {
       ],
     })
 
-    const badReplacement = new Node({
+    const equivalentReplacement = new Node({
       loadOverrides: true,
       path: '/some/path',
       pkg: {
@@ -2886,7 +3090,7 @@ t.test('overrides', (t) => {
       ],
     })
 
-    t.equal(original.canReplaceWith(badReplacement), false, 'different overrides fails')
+    t.equal(original.canReplaceWith(equivalentReplacement), true, 'different overrides passes')
 
     const goodReplacement = new Node({
       path: '/some/path',
@@ -2934,4 +3138,462 @@ t.test('node with only registry edges in a registry dep', async t => {
   new Node({ pkg: { name: 'registry', dependencies: { node: '^1.0.0' } }, parent: root })
 
   t.equal(node.isRegistryDependency, true)
+})
+
+t.test('canReplaceWith returns false when overrides differ', t => {
+  const override1 = new OverrideSet({
+    overrides: { foo: '1.0.0' },
+  })
+  const override2 = new OverrideSet({
+    overrides: { foo: '2.0.0' },
+  })
+
+  // Create two nodes with a dependency to force creation of an outgoing edge
+  const node1 = new Node({
+    pkg: { name: 'foo', dependencies: { bar: '^1' } },
+    path: '/some/path/foo',
+    realpath: '/some/path/foo',
+    overrides: override1,
+  })
+  const node2 = new Node({
+    pkg: { name: 'foo', dependencies: { bar: '^1' } },
+    path: '/some/path/foo',
+    realpath: '/some/path/foo',
+    overrides: override2,
+  })
+
+  t.ok(node1.edgesOut.size > 0, 'node1 has outgoing edges')
+  t.equal(node1.canReplaceWith(node2, new Set()), false, 'cannot replace when overrides differ')
+  t.end()
+})
+
+t.test('updateOverridesEdgeInRemoved uses findSpecificOverrideSet for multiple edgesIn', t => {
+  const commonOverrides = new OverrideSet({
+    overrides: {
+      foo: '1.0.0',
+    },
+  })
+  const specificOverrides = new OverrideSet({
+    overrides: {
+      foo: '1.0.0',
+      bar: '2.0.0',
+    },
+  })
+  // Create a node with initial overrides set to commonOverrides
+  const node = new Node({
+    pkg: { name: 'nodeA' },
+    path: '/some/path/nodeA',
+    realpath: '/some/path/nodeA',
+    overrides: commonOverrides,
+  })
+  // Simulate incoming edges with overrides
+  node.edgesIn.add({
+    overrides: commonOverrides,
+  })
+  node.edgesIn.add({
+    overrides: specificOverrides,
+  })
+  // Call updateOverridesEdgeInRemoved passing an override set equal to node.overrides
+  const result = node.updateOverridesEdgeInRemoved(commonOverrides)
+  t.equal(result, true, 'updateOverridesEdgeInRemoved returns true when newOverrideSet differs')
+  t.notOk(commonOverrides.isEqual(node.overrides), 'node.overrides is updated to a more specific override set')
+  t.end()
+})
+
+t.test('updateOverridesEdgeInAdded conflicts on conflicting override set', t => {
+  const overrides8 = new OverrideSet({
+    overrides: {
+      bat: '1.2.0',
+    },
+  })
+  const overrides9 = new OverrideSet({
+    overrides: {
+      'bat@3.0.0': '1.2.0',
+    },
+  })
+
+  // Create a node with an existing override set
+  const node = new Node({
+    pkg: { name: 'conflict-node' },
+    path: '/some/path/conflict-node',
+    realpath: '/some/path/conflict-node',
+    overrides: overrides8,
+  })
+
+  // Call updateOverridesEdgeInAdded with a conflicting override set
+  const result = node.updateOverridesEdgeInAdded(overrides9)
+  t.equal(result, undefined, 'returns undefined on conflict')
+
+  t.end()
+})
+
+t.test('updateOverridesEdgeInRemoved calls recalculateOutEdgesOverrides when new override set exists', t => {
+  const originalOverrides = new OverrideSet({
+    overrides: {
+      foo: '1.0.0',
+    },
+  })
+  const specificOverrides = new OverrideSet({
+    overrides: {
+      foo: '1.0.0',
+      bar: '2.0.0',
+    },
+  })
+
+  // Create a node with original overrides and simulate an incoming edge
+  // whose override is more specific, so that the computed newOverrideSet
+  // differs from the original, triggering recalculateOutEdgesOverrides
+  const node = new Node({
+    pkg: { name: 'test-node' },
+    path: '/some/path/test-node',
+    realpath: '/some/path/test-node',
+    overrides: originalOverrides,
+  })
+
+  node.edgesIn.add({
+    overrides: specificOverrides,
+  })
+
+  // Spy on recalculateOutEdgesOverrides to verify it's called
+  let recalcCalled = false
+  node.recalculateOutEdgesOverrides = () => {
+    recalcCalled = true
+  }
+
+  const result = node.updateOverridesEdgeInRemoved(originalOverrides)
+  t.equal(result, true, 'returns true when override set changes')
+  t.ok(recalcCalled, 'recalculateOutEdgesOverrides was called')
+  t.ok(specificOverrides.isEqual(node.overrides), 'node.overrides updated to the specific override set')
+  t.end()
+})
+
+t.test('should propagate the new override set to the target node', t => {
+  const tree = new Node({
+    loadOverrides: true,
+    path: '/root',
+    pkg: {
+      name: 'root',
+      version: '1.0.0',
+      dependencies: {
+        mockDep: '1.x',
+      },
+      overrides: {
+        mockDep: '2.x',
+      },
+    },
+    children: [{
+      name: 'mockDep',
+      version: '2.0.0',
+      pkg: {
+        dependencies: {
+          subDep: '1.0.0',
+        },
+      },
+      children: [{
+        name: 'subDep',
+        version: '1.0.0',
+        pkg: {},
+      }],
+    }],
+  })
+
+  // Force edge.override to a conflicting object so that it will differ from
+  // the computed override coming from the parent's override set.
+  const conflictingOverride = new OverrideSet({
+    overrides: { mockDep: '1.x' },
+  })
+  const edge = tree.edgesOut.get('mockDep')
+  edge.overrides = conflictingOverride
+
+  // Calls updateOverridesEdgeInRemoved and updateOverridesEdgeInAdded
+  edge.reload()
+
+  // Validate that the override's value property has been updated
+  t.equal(edge.overrides.value, '2.x', 'Edge override propagates the correct override value from the parent')
+
+  t.end()
+})
+
+t.test('override conflict detection with semantic comparison', t => {
+  t.test('non-conflicting different override sets should be valid', t => {
+    // Regression test for issue #8688
+    // This validates that the improved semantic conflict detection allows
+    // structurally different override sets that don't actually conflict.
+
+    // Create two different override sets (simulating Vaadin's structure)
+    // These override different packages, so they don't conflict
+    const overridesComponents = new OverrideSet({
+      overrides: {
+        '@vaadin/react-components': '24.9.2',
+      },
+    })
+
+    const overridesComponentsPro = new OverrideSet({
+      overrides: {
+        '@vaadin/react-components-pro': '24.9.2',
+      },
+    })
+
+    const tree = new Node({
+      loadOverrides: true,
+      path: '/root',
+      pkg: {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: {
+          mockDep: '1.x',
+        },
+        overrides: {
+          mockDep: '2.x',
+        },
+      },
+      children: [{
+        name: 'mockDep',
+        version: '2.0.0',
+        pkg: {
+          dependencies: {
+            subDep: '1.0.0',
+          },
+        },
+        children: [{
+          name: 'subDep',
+          version: '1.0.0',
+          pkg: {},
+        }],
+      }],
+    })
+
+    const edge = tree.edgesOut.get('mockDep')
+
+    // Manually set an override to the edge
+    edge.overrides = overridesComponents
+
+    // Override satisfiedBy so it returns true, ensuring the conflict branch is reached
+    edge.satisfiedBy = () => true
+
+    // Set different but non-conflicting override on the target node
+    const mockDep = tree.children.get('mockDep')
+    mockDep.overrides = overridesComponentsPro
+
+    // Force edge to recalculate
+    edge.reload(true)
+
+    // The edge should be valid despite different override contexts
+    // because they don't have conflicting version requirements
+    t.equal(edge.error, null, 'Edge should be valid with non-conflicting override contexts')
+    t.ok(edge.valid, 'Edge.valid should be true')
+
+    t.end()
+  })
+
+  t.test('conflicting override sets should be detected as invalid', t => {
+    // This validates that actual conflicts ARE still caught by the semantic detection
+
+    // Create two override sets with conflicting version requirements for the same package
+    const overridesV1 = new OverrideSet({
+      overrides: {
+        lodash: '1.x',
+      },
+    })
+
+    const overridesV4 = new OverrideSet({
+      overrides: {
+        lodash: '4.x',
+      },
+    })
+
+    const tree = new Node({
+      loadOverrides: true,
+      path: '/root',
+      pkg: {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: {
+          mockDep: '1.x',
+        },
+        overrides: {
+          mockDep: '2.x',
+        },
+      },
+      children: [{
+        name: 'mockDep',
+        version: '2.0.0',
+        pkg: {
+          dependencies: {
+            lodash: '1.0.0',
+          },
+        },
+        children: [{
+          name: 'lodash',
+          version: '1.0.0',
+          pkg: {},
+        }],
+      }],
+    })
+
+    const edge = tree.edgesOut.get('mockDep')
+    const mockDep = tree.children.get('mockDep')
+
+    // Manually set conflicting overrides
+    edge.overrides = overridesV1
+    mockDep.overrides = overridesV4
+
+    // Override satisfiedBy so it returns true, ensuring the conflict branch is reached
+    edge.satisfiedBy = () => true
+
+    // Clear the cached error by calling reload(true)
+    edge.reload(true)
+
+    // Re-set the overrides after reload (since reload may have changed them)
+    edge.overrides = overridesV1
+    mockDep.overrides = overridesV4
+
+    // The edge should be INVALID due to conflicting override requirements
+    t.equal(edge.error, 'INVALID', 'Edge should be invalid with conflicting override versions')
+    t.notOk(edge.valid, 'Edge.valid should be false')
+
+    t.end()
+  })
+
+  t.test('reference overrides should not cause false positives', t => {
+    // This validates that reference overrides ($syntax) don't trigger false positives
+
+    const overridesRef1 = new OverrideSet({
+      overrides: {
+        lodash: '$some-reference',
+      },
+    })
+
+    const overridesRef2 = new OverrideSet({
+      overrides: {
+        lodash: '$another-reference',
+      },
+    })
+
+    const tree = new Node({
+      loadOverrides: true,
+      path: '/root',
+      pkg: {
+        name: 'root',
+        version: '1.0.0',
+        dependencies: {
+          mockDep: '1.x',
+        },
+        overrides: {
+          mockDep: '2.x',
+        },
+      },
+      children: [{
+        name: 'mockDep',
+        version: '2.0.0',
+        pkg: {
+          dependencies: {
+            lodash: '4.0.0',
+          },
+        },
+        children: [{
+          name: 'lodash',
+          version: '4.0.0',
+          pkg: {},
+        }],
+      }],
+    })
+
+    const edge = tree.edgesOut.get('mockDep')
+
+    // Set reference overrides
+    edge.overrides = overridesRef1
+
+    // Override satisfiedBy so it returns true, ensuring the conflict branch is reached
+    edge.satisfiedBy = () => true
+
+    const mockDep = tree.children.get('mockDep')
+    mockDep.overrides = overridesRef2
+
+    // Force edge to recalculate
+    edge.reload(true)
+
+    // Reference overrides should not cause conflicts because we can't determine
+    // their compatibility at this stage - they might resolve to the same version
+    t.equal(edge.error, null, 'Edge should be valid with reference overrides')
+    t.ok(edge.valid, 'Edge.valid should be true with reference overrides')
+
+    t.end()
+  })
+
+  t.end()
+})
+
+t.test('shouldOmit method', t => {
+  t.test('dev dependency with dev omit', t => {
+    const node = new Node({
+      pkg: { name: 'test' },
+      path: '/test',
+      dummy: true,
+    })
+    node.dev = true
+    t.equal(node.shouldOmit(new Set(['dev'])), true, 'should omit dev dependency when dev is omitted')
+    t.equal(node.shouldOmit(new Set(['optional'])), false, 'should not omit dev dependency when only optional is omitted')
+    t.end()
+  })
+
+  t.test('optional dependency with optional omit', t => {
+    const node = new Node({
+      pkg: { name: 'test' },
+      path: '/test',
+      dummy: true,
+    })
+    node.optional = true
+    t.equal(node.shouldOmit(new Set(['optional'])), true, 'should omit optional dependency when optional is omitted')
+    t.equal(node.shouldOmit(new Set(['dev'])), false, 'should not omit optional dependency when only dev is omitted')
+    t.end()
+  })
+
+  t.test('peer dependency with peer omit', t => {
+    const node = new Node({
+      pkg: { name: 'test' },
+      path: '/test',
+      dummy: true,
+    })
+    node.peer = true
+    t.equal(node.shouldOmit(new Set(['peer'])), true, 'should omit peer dependency when peer is omitted')
+    t.equal(node.shouldOmit(new Set(['dev'])), false, 'should not omit peer dependency when only dev is omitted')
+    t.end()
+  })
+
+  t.test('devOptional dependency', t => {
+    const node = new Node({
+      pkg: { name: 'test' },
+      path: '/test',
+      dummy: true,
+    })
+    node.devOptional = true
+    t.equal(node.shouldOmit(new Set(['dev', 'optional'])), true, 'should omit devOptional when both dev and optional are omitted')
+    t.equal(node.shouldOmit(new Set(['dev'])), false, 'should not omit devOptional when only dev is omitted')
+    t.equal(node.shouldOmit(new Set(['optional'])), false, 'should not omit devOptional when only optional is omitted')
+    t.end()
+  })
+
+  t.test('regular dependency', t => {
+    const node = new Node({
+      pkg: { name: 'test' },
+      path: '/test',
+      dummy: true,
+    })
+    t.equal(node.shouldOmit(new Set(['dev', 'optional', 'peer'])), false, 'should never omit regular dependencies')
+    t.end()
+  })
+
+  t.test('empty omit set', t => {
+    const node = new Node({
+      pkg: { name: 'test' },
+      path: '/test',
+      dummy: true,
+    })
+    node.dev = true
+    t.equal(node.shouldOmit(new Set()), false, 'should not omit anything when omit set is empty')
+    t.end()
+  })
+
+  t.end()
 })

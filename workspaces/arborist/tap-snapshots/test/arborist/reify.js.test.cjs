@@ -165,11 +165,11 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP add a dep present in the tree, with v1 shrinkwrap > must match snapshot 1`] = `
+exports[`test/arborist/reify.js TAP add a dep present in the tree, with v1 lockfile > must match snapshot 1`] = `
 {"dependencies":{"once":"^1.4.0","wrappy":"^1.0.2"}}
 `
 
-exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be mkdirpd > should output a successful tree in mkdirp folder 1`] = `
+exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be mkdirpd not dry run > should output a successful tree in mkdirp folder 1`] = `
 ArboristNode {
   "children": Map {
     "abbrev" => ArboristNode {
@@ -183,7 +183,7 @@ ArboristNode {
       },
       "location": "node_modules/abbrev",
       "name": "abbrev",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-add-a-new-pkg-to-a-prefix-that-needs-to-be-mkdirpd/missing/path/to/root/node_modules/abbrev",
+      "path": "{CWD}/test/arborist/tap-testdir-reify-add-a-new-pkg-to-a-prefix-that-needs-to-be-mkdirpd-not-dry-run/missing/path/to/root/node_modules/abbrev",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
       "version": "1.1.1",
     },
@@ -199,14 +199,14 @@ ArboristNode {
   "isProjectRoot": true,
   "location": "",
   "name": "root",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-add-a-new-pkg-to-a-prefix-that-needs-to-be-mkdirpd/missing/path/to/root",
+  "path": "{CWD}/test/arborist/tap-testdir-reify-add-a-new-pkg-to-a-prefix-that-needs-to-be-mkdirpd-not-dry-run/missing/path/to/root",
 }
 `
 
-exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be mkdirpd > should place expected lockfile file into place 1`] = `
+exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be mkdirpd not dry run > should place expected lockfile file into place 1`] = `
 {
   "name": "root",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -217,21 +217,15 @@ exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be m
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-    }
-  },
-  "dependencies": {
-    "abbrev": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     }
   }
 }
 
 `
 
-exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be mkdirpd > should place expected package.json file into place 1`] = `
+exports[`test/arborist/reify.js TAP add a new pkg to a prefix that needs to be mkdirpd not dry run > should place expected package.json file into place 1`] = `
 {
   "dependencies": {
     "abbrev": "^1.1.1"
@@ -264,6 +258,7 @@ Object {
     },
     "node_modules/minimist": Object {
       "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
       "version": "1.2.5",
     },
@@ -275,6 +270,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -292,6 +288,7 @@ Object {
         "minimist": "^1.2.5",
       },
       "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
       "version": "0.5.5",
     },
@@ -471,56 +468,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces add mkdirp 0.5.0 to b > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "dependencies": Object {
-        "mkdirp": Object {
-          "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
-          "requires": Object {
-            "minimist": "^1.2.5",
-          },
-          "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
-          "version": "0.5.5",
-        },
-      },
-      "requires": Object {
-        "mkdirp": "^0.5.0",
-      },
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "dependencies": Object {
-        "minimist": Object {
-          "integrity": "sha1-hX/Kv8M5fSYluCKCYuhqp6ARsF0=",
-          "resolved": "https://registry.npmjs.org/minimist/-/minimist-0.0.8.tgz",
-          "version": "0.0.8",
-        },
-        "mkdirp": Object {
-          "integrity": "sha1-HXMHam35hs2TROFecfzAWkyavxI=",
-          "requires": Object {
-            "minimist": "0.0.8",
-          },
-          "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.0.tgz",
-          "version": "0.5.0",
-        },
-      },
-      "requires": Object {
-        "mkdirp": "0.5.0",
-      },
-      "version": "file:packages/b",
-    },
-    "minimist": Object {
-      "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
-      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
-      "version": "1.2.5",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-add-mkdirp-0.5.0-to-b",
   "packages": Object {
     "": Object {
@@ -541,6 +489,7 @@ Object {
     },
     "node_modules/minimist": Object {
       "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
       "version": "1.2.5",
     },
@@ -552,6 +501,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -569,6 +519,7 @@ Object {
         "minimist": "^1.2.5",
       },
       "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
       "version": "0.5.5",
     },
@@ -580,6 +531,7 @@ Object {
     },
     "packages/b/node_modules/minimist": Object {
       "integrity": "sha1-hX/Kv8M5fSYluCKCYuhqp6ARsF0=",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/minimist/-/minimist-0.0.8.tgz",
       "version": "0.0.8",
     },
@@ -592,6 +544,7 @@ Object {
       },
       "deprecated": "Legacy versions of mkdirp are no longer supported. Please update to mkdirp 1.x. (Note that the API surface has changed to use Promises in 1.x.)",
       "integrity": "sha1-HXMHam35hs2TROFecfzAWkyavxI=",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.0.tgz",
       "version": "0.5.0",
     },
@@ -814,56 +767,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces add mkdirp 0.5.0 to b, empty start > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "dependencies": Object {
-        "mkdirp": Object {
-          "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
-          "requires": Object {
-            "minimist": "^1.2.5",
-          },
-          "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
-          "version": "0.5.5",
-        },
-      },
-      "requires": Object {
-        "mkdirp": "^0.5.0",
-      },
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "dependencies": Object {
-        "minimist": Object {
-          "integrity": "sha1-hX/Kv8M5fSYluCKCYuhqp6ARsF0=",
-          "resolved": "https://registry.npmjs.org/minimist/-/minimist-0.0.8.tgz",
-          "version": "0.0.8",
-        },
-        "mkdirp": Object {
-          "integrity": "sha1-HXMHam35hs2TROFecfzAWkyavxI=",
-          "requires": Object {
-            "minimist": "0.0.8",
-          },
-          "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.0.tgz",
-          "version": "0.5.0",
-        },
-      },
-      "requires": Object {
-        "mkdirp": "0.5.0",
-      },
-      "version": "file:packages/b",
-    },
-    "minimist": Object {
-      "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
-      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
-      "version": "1.2.5",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-add-mkdirp-0.5.0-to-b-empty-start",
   "packages": Object {
     "": Object {
@@ -884,6 +788,7 @@ Object {
     },
     "node_modules/minimist": Object {
       "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
       "version": "1.2.5",
     },
@@ -895,6 +800,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -912,6 +818,7 @@ Object {
         "minimist": "^1.2.5",
       },
       "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
       "version": "0.5.5",
     },
@@ -923,6 +830,7 @@ Object {
     },
     "packages/b/node_modules/minimist": Object {
       "integrity": "sha1-hX/Kv8M5fSYluCKCYuhqp6ARsF0=",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/minimist/-/minimist-0.0.8.tgz",
       "version": "0.0.8",
     },
@@ -935,6 +843,7 @@ Object {
       },
       "deprecated": "Legacy versions of mkdirp are no longer supported. Please update to mkdirp 1.x. (Note that the API surface has changed to use Promises in 1.x.)",
       "integrity": "sha1-HXMHam35hs2TROFecfzAWkyavxI=",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.0.tgz",
       "version": "0.5.0",
     },
@@ -1069,38 +978,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces no args > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "dependencies": Object {
-        "mkdirp": Object {
-          "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
-          "requires": Object {
-            "minimist": "^1.2.5",
-          },
-          "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
-          "version": "0.5.5",
-        },
-      },
-      "requires": Object {
-        "mkdirp": "^0.5.0",
-      },
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "version": "file:packages/b",
-    },
-    "minimist": Object {
-      "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
-      "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
-      "version": "1.2.5",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-no-args",
   "packages": Object {
     "": Object {
@@ -1121,6 +999,7 @@ Object {
     },
     "node_modules/minimist": Object {
       "integrity": "sha512-FM9nNUYrRBAELZQT3xeZQ7fmMOBg6nWNmJKTcgsJeaLstP/UODVpGsr5OhXhhXg6f+qtJ8uiZ+PUxkDWcgIXLw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/minimist/-/minimist-1.2.5.tgz",
       "version": "1.2.5",
     },
@@ -1132,6 +1011,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -1149,6 +1029,7 @@ Object {
         "minimist": "^1.2.5",
       },
       "integrity": "sha512-NKmAlESf6jMGym1++R0Ra7wvhV+wFW63FaSOFPwRahvea0gMUcGUhVeAg/0BC0wiv9ih5NYPB1Wn1UEI1/L+xQ==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-0.5.5.tgz",
       "version": "0.5.5",
     },
@@ -1316,20 +1197,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces remove mkdirp from a > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "version": "file:packages/b",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-remove-mkdirp-from-a",
   "packages": Object {
     "": Object {
@@ -1356,6 +1224,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -1485,20 +1354,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces remove mkdirp from a, empty start > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "version": "file:packages/b",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-remove-mkdirp-from-a-empty-start",
   "packages": Object {
     "": Object {
@@ -1525,6 +1381,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -1614,23 +1471,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces upgrade mkdirp in a, dedupe on root > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "requires": Object {
-        "mkdirp": "1",
-      },
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "version": "file:packages/b",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-upgrade-mkdirp-in-a-dedupe-on-root",
   "packages": Object {
     "": Object {
@@ -1657,6 +1498,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -1806,23 +1648,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP add deps to workspaces upgrade mkdirp in a, dedupe on root, empty start > lockfile 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "requires": Object {
-        "mkdirp": "1",
-      },
-      "version": "file:packages/a",
-    },
-    "b": Object {
-      "version": "file:packages/b",
-    },
-    "mkdirp": Object {
-      "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
-      "version": "1.0.4",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-add-deps-to-workspaces-upgrade-mkdirp-in-a-dedupe-on-root-empty-start",
   "packages": Object {
     "": Object {
@@ -1849,6 +1675,7 @@ Object {
         "node": ">=10",
       },
       "integrity": "sha512-vVqVZQyf3WLx2Shd0qJ9xuvqgAyKPLAiqITEtqW0oIUjzo3PePDd6fW9iFz30ef7Ysp/oiWqbhszeGWW2T6Gzw==",
+      "license": "MIT",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.4.tgz",
       "version": "1.0.4",
     },
@@ -2030,174 +1857,136 @@ exports[`test/arborist/reify.js TAP add spec * with semver prefix range gets upd
 
 `
 
-exports[`test/arborist/reify.js TAP adding an unresolvable optional dep is OK > must match snapshot 1`] = `
-ArboristNode {
-  "edgesOut": Map {
-    "abbrev" => EdgeOut {
-      "name": "abbrev",
-      "spec": "999999",
-      "to": null,
-      "type": "optional",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-adding-an-unresolvable-optional-dep-is-OK",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-adding-an-unresolvable-optional-dep-is-OK",
-}
-`
-
-exports[`test/arborist/reify.js TAP bad shrinkwrap file > expect resolving Promise 1`] = `
+exports[`test/arborist/reify.js TAP bundled file dep with same name as other dep > must match snapshot 1`] = `
 ArboristNode {
   "children": Map {
-    "@isaacs/testing-peer-deps-b" => ArboristNode {
+    "@fixtures/has-package-exports" => ArboristLink {
+      "bundleDependencies": Array [
+        "abbrev",
+      ],
       "edgesIn": Set {
         EdgeIn {
           "from": "",
-          "name": "@isaacs/testing-peer-deps-b",
-          "spec": "1",
+          "name": "@fixtures/has-package-exports",
+          "spec": "file:fixtures-has-package-exports",
+          "type": "prod",
+        },
+      },
+      "location": "node_modules/@fixtures/has-package-exports",
+      "name": "@fixtures/has-package-exports",
+      "path": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/node_modules/@fixtures/has-package-exports",
+      "realpath": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/fixtures-has-package-exports",
+      "resolved": "file:../../fixtures-has-package-exports",
+      "target": ArboristNode {
+        "location": "fixtures-has-package-exports",
+      },
+    },
+    "@ljharb/has-package-exports-patterns" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "node_modules/has-package-exports",
+          "name": "@ljharb/has-package-exports-patterns",
+          "spec": "^0.0.2",
+          "type": "prod",
+        },
+      },
+      "location": "node_modules/@ljharb/has-package-exports-patterns",
+      "name": "@ljharb/has-package-exports-patterns",
+      "path": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/node_modules/@ljharb/has-package-exports-patterns",
+      "resolved": "https://registry.npmjs.org/@ljharb/has-package-exports-patterns/-/has-package-exports-patterns-0.0.2.tgz",
+      "version": "0.0.2",
+    },
+    "has-package-exports" => ArboristNode {
+      "edgesIn": Set {
+        EdgeIn {
+          "from": "",
+          "name": "has-package-exports",
+          "spec": "^1.3.0",
           "type": "prod",
         },
       },
       "edgesOut": Map {
-        "@isaacs/testing-peer-deps-c" => EdgeOut {
-          "name": "@isaacs/testing-peer-deps-c",
-          "spec": "1",
-          "to": "node_modules/@isaacs/testing-peer-deps-c",
-          "type": "peer",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-peer-deps-b",
-      "name": "@isaacs/testing-peer-deps-b",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file/node_modules/@isaacs/testing-peer-deps-b",
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-b/-/testing-peer-deps-b-1.2.4.tgz",
-      "version": "1.2.4",
-    },
-    "@isaacs/testing-peer-deps-c" => ArboristNode {
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "node_modules/@isaacs/testing-peer-deps-b",
-          "name": "@isaacs/testing-peer-deps-c",
-          "spec": "1",
-          "type": "peer",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-peer-deps-c",
-      "name": "@isaacs/testing-peer-deps-c",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file/node_modules/@isaacs/testing-peer-deps-c",
-      "peer": true,
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-c/-/testing-peer-deps-c-1.2.3.tgz",
-      "version": "1.2.3",
-    },
-    "@isaacs/testing-peer-deps-d" => ArboristNode {
-      "children": Map {
-        "@isaacs/testing-peer-deps-a" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-peer-deps-d",
-              "name": "@isaacs/testing-peer-deps-a",
-              "spec": "2",
-              "type": "prod",
-            },
-          },
-          "edgesOut": Map {
-            "@isaacs/testing-peer-deps-b" => EdgeOut {
-              "name": "@isaacs/testing-peer-deps-b",
-              "spec": "2",
-              "to": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-              "type": "peer",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-          "name": "@isaacs/testing-peer-deps-a",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file/node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-a/-/testing-peer-deps-a-2.0.0.tgz",
-          "version": "2.0.0",
-        },
-        "@isaacs/testing-peer-deps-b" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-              "name": "@isaacs/testing-peer-deps-b",
-              "spec": "2",
-              "type": "peer",
-            },
-          },
-          "edgesOut": Map {
-            "@isaacs/testing-peer-deps-c" => EdgeOut {
-              "name": "@isaacs/testing-peer-deps-c",
-              "spec": "2",
-              "to": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-c",
-              "type": "peer",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-          "name": "@isaacs/testing-peer-deps-b",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file/node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-          "peer": true,
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-b/-/testing-peer-deps-b-2.0.1.tgz",
-          "version": "2.0.1",
-        },
-        "@isaacs/testing-peer-deps-c" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-b",
-              "name": "@isaacs/testing-peer-deps-c",
-              "spec": "2",
-              "type": "peer",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-c",
-          "name": "@isaacs/testing-peer-deps-c",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file/node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-c",
-          "peer": true,
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-c/-/testing-peer-deps-c-2.0.0.tgz",
-          "version": "2.0.0",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/testing-peer-deps-d",
-          "spec": "2",
+        "@ljharb/has-package-exports-patterns" => EdgeOut {
+          "name": "@ljharb/has-package-exports-patterns",
+          "spec": "^0.0.2",
+          "to": "node_modules/@ljharb/has-package-exports-patterns",
           "type": "prod",
         },
       },
-      "edgesOut": Map {
-        "@isaacs/testing-peer-deps-a" => EdgeOut {
-          "name": "@isaacs/testing-peer-deps-a",
-          "spec": "2",
-          "to": "node_modules/@isaacs/testing-peer-deps-d/node_modules/@isaacs/testing-peer-deps-a",
-          "type": "prod",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-peer-deps-d",
-      "name": "@isaacs/testing-peer-deps-d",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file/node_modules/@isaacs/testing-peer-deps-d",
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-peer-deps-d/-/testing-peer-deps-d-2.0.0.tgz",
-      "version": "2.0.0",
+      "location": "node_modules/has-package-exports",
+      "name": "has-package-exports",
+      "path": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/node_modules/has-package-exports",
+      "resolved": "https://registry.npmjs.org/has-package-exports/-/has-package-exports-1.3.0.tgz",
+      "version": "1.3.0",
     },
   },
   "edgesOut": Map {
-    "@isaacs/testing-peer-deps-b" => EdgeOut {
-      "name": "@isaacs/testing-peer-deps-b",
-      "spec": "1",
-      "to": "node_modules/@isaacs/testing-peer-deps-b",
+    "@fixtures/has-package-exports" => EdgeOut {
+      "name": "@fixtures/has-package-exports",
+      "spec": "file:fixtures-has-package-exports",
+      "to": "node_modules/@fixtures/has-package-exports",
       "type": "prod",
     },
-    "@isaacs/testing-peer-deps-d" => EdgeOut {
-      "name": "@isaacs/testing-peer-deps-d",
-      "spec": "2",
-      "to": "node_modules/@isaacs/testing-peer-deps-d",
+    "has-package-exports" => EdgeOut {
+      "name": "has-package-exports",
+      "spec": "^1.3.0",
+      "to": "node_modules/has-package-exports",
       "type": "prod",
+    },
+  },
+  "fsChildren": Set {
+    ArboristNode {
+      "bundleDependencies": Array [
+        "abbrev",
+      ],
+      "children": Map {
+        "has-package-exports" => ArboristLink {
+          "bundleDependencies": Array [
+            "abbrev",
+          ],
+          "dev": true,
+          "edgesIn": Set {
+            EdgeIn {
+              "from": "fixtures-has-package-exports",
+              "name": "has-package-exports",
+              "spec": "file:.",
+              "type": "dev",
+            },
+          },
+          "location": "fixtures-has-package-exports/node_modules/has-package-exports",
+          "name": "has-package-exports",
+          "path": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/fixtures-has-package-exports/node_modules/has-package-exports",
+          "realpath": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/fixtures-has-package-exports",
+          "resolved": "file:..",
+          "target": ArboristNode {
+            "location": "fixtures-has-package-exports",
+          },
+        },
+      },
+      "edgesOut": Map {
+        "abbrev" => EdgeOut {
+          "error": "MISSING",
+          "name": "abbrev",
+          "spec": "1.1.1",
+          "to": null,
+          "type": "prod",
+        },
+        "has-package-exports" => EdgeOut {
+          "name": "has-package-exports",
+          "spec": "file:.",
+          "to": "fixtures-has-package-exports/node_modules/has-package-exports",
+          "type": "dev",
+        },
+      },
+      "location": "fixtures-has-package-exports",
+      "name": "@fixtures/has-package-exports",
+      "path": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep/fixtures-has-package-exports",
     },
   },
   "isProjectRoot": true,
   "location": "",
-  "name": "tap-testdir-reify-bad-shrinkwrap-file",
-  "packageName": "@isaacs/testing-peer-deps",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-bad-shrinkwrap-file",
-  "version": "2.0.0",
+  "name": "tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep",
+  "path": "{CWD}/test/arborist/tap-testdir-reify-bundled-file-dep-with-same-name-as-other-dep",
 }
 `
 
@@ -2531,69 +2320,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP do not add shrinkwrapped deps > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-add-shrinkwrapped-deps/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-add-shrinkwrapped-deps/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-do-not-add-shrinkwrapped-deps",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-add-shrinkwrapped-deps",
-  "version": "1.0.0",
-}
-`
-
 exports[`test/arborist/reify.js TAP do not delete root-bundled deps in global update > after first install 1`] = `
 {
   "name": "dep"
@@ -2612,7 +2338,7 @@ exports[`test/arborist/reify.js TAP do not excessively duplicate bundled metadep
 {
   "name": "@isaacs/bundle-metadep-duplication-root",
   "version": "1.0.0",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "node_modules/@isaacs/bundle-metadep-duplication-x": {
@@ -2652,7 +2378,8 @@ exports[`test/arborist/reify.js TAP do not excessively duplicate bundled metadep
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     }
   }
 }
@@ -2663,7 +2390,7 @@ exports[`test/arborist/reify.js TAP do not excessively duplicate bundled metadep
 {
   "name": "@isaacs/bundle-metadep-duplication-root",
   "version": "1.0.0",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -2710,47 +2437,8 @@ exports[`test/arborist/reify.js TAP do not excessively duplicate bundled metadep
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-    }
-  },
-  "dependencies": {
-    "@isaacs/bundle-metadep-duplication-x": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/@isaacs/bundle-metadep-duplication-x/-/bundle-metadep-duplication-x-1.0.2.tgz",
-      "integrity": "sha512-mlCA3lXLaraoJFrnZ1sBZeXy4qdYpubKH8jZB5KIjCCwcWPgOui/EWTWnf/wf0Q08V0qr8xmG63wGQgEa+hkSw==",
-      "requires": {
-        "@isaacs/bundle-metadep-duplication-y": "1",
-        "@isaacs/bundle-metadep-duplication-z": "1",
-        "abbrev": "1"
-      },
-      "dependencies": {
-        "@isaacs/bundle-metadep-duplication-a": {
-          "version": "1.0.0",
-          "bundled": true,
-          "requires": {
-            "@isaacs/bundle-metadep-duplication-z": "1"
-          }
-        },
-        "@isaacs/bundle-metadep-duplication-y": {
-          "version": "1.0.0",
-          "bundled": true,
-          "requires": {
-            "@isaacs/bundle-metadep-duplication-z": "1"
-          }
-        },
-        "@isaacs/bundle-metadep-duplication-z": {
-          "version": "1.0.0",
-          "bundled": true,
-          "requires": {
-            "@isaacs/bundle-metadep-duplication-a": "1"
-          }
-        }
-      }
-    },
-    "abbrev": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     }
   }
 }
@@ -2917,88 +2605,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP do not install optional deps with mismatched platform specifications > expect resolving Promise 1`] = `
-ArboristNode {
-  "edgesOut": Map {
-    "platform-specifying-test-package" => EdgeOut {
-      "name": "platform-specifying-test-package",
-      "spec": "1.0.0",
-      "to": null,
-      "type": "optional",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-do-not-install-optional-deps-with-mismatched-platform-specifications",
-  "packageName": "platform-test",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-install-optional-deps-with-mismatched-platform-specifications",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/reify.js TAP do not update shrinkwrapped deps > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-update-shrinkwrapped-deps/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-update-shrinkwrapped-deps/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-do-not-update-shrinkwrapped-deps",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-do-not-update-shrinkwrapped-deps",
-  "version": "1.0.0",
-}
-`
-
 exports[`test/arborist/reify.js TAP dry run, do not get anything wet link-dep-empty > must match snapshot 1`] = `
 ArboristNode {
   "children": Map {
@@ -3133,132 +2739,6 @@ ArboristNode {
   "location": "",
   "name": "tap-testdir-reify-dry-run-do-not-get-anything-wet-link-meta-deps-empty",
   "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-link-meta-deps-empty",
-}
-`
-
-exports[`test/arborist/reify.js TAP dry run, do not get anything wet shrinkwrapped-dep-no-lock-empty > must match snapshot 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-no-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-no-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-no-lock-empty",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-no-lock-empty",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/reify.js TAP dry run, do not get anything wet shrinkwrapped-dep-with-lock-empty > must match snapshot 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-with-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-with-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-with-lock-empty",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-dry-run-do-not-get-anything-wet-shrinkwrapped-dep-with-lock-empty",
-  "version": "1.0.0",
 }
 `
 
@@ -3542,7 +3022,7 @@ ArboristNode {
 exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden lockfile - c 1`] = `
 {
   "name": "tap-testdir-reify-filtered-reification-in-workspaces",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "node_modules/c": {
@@ -3552,7 +3032,8 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
     "node_modules/wrappy": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.0.tgz",
-      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4="
+      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4=",
+      "license": "ISC"
     },
     "packages/c": {
       "version": "1.2.3",
@@ -3568,7 +3049,7 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
 exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden lockfile - c, old x, removed a 1`] = `
 {
   "name": "tap-testdir-reify-filtered-reification-in-workspaces",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "apps/x": {
@@ -3581,7 +3062,8 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
     "node_modules/wrappy": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.0.tgz",
-      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4="
+      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4=",
+      "license": "ISC"
     },
     "node_modules/x": {
       "resolved": "apps/x",
@@ -3601,7 +3083,7 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
 exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden lockfile - c, x 1`] = `
 {
   "name": "tap-testdir-reify-filtered-reification-in-workspaces",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "apps/x": {
@@ -3614,7 +3096,8 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
     "node_modules/wrappy": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.0.tgz",
-      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4="
+      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4=",
+      "license": "ISC"
     },
     "node_modules/x": {
       "resolved": "apps/x",
@@ -3634,7 +3117,7 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
 exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden lockfile - c, x, a 1`] = `
 {
   "name": "tap-testdir-reify-filtered-reification-in-workspaces",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "apps/x": {
@@ -3652,6 +3135,7 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
       "version": "1.4.0",
       "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
       "integrity": "sha1-WDsap3WWHUsROsF9nFC6753Xa9E=",
+      "license": "ISC",
       "dependencies": {
         "wrappy": "1"
       }
@@ -3659,7 +3143,8 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
     "node_modules/wrappy": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.0.tgz",
-      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4="
+      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4=",
+      "license": "ISC"
     },
     "node_modules/x": {
       "resolved": "apps/x",
@@ -3675,7 +3160,8 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
     "packages/a/node_modules/wrappy": {
       "version": "1.0.2",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
-      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8="
+      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8=",
+      "license": "ISC"
     },
     "packages/c": {
       "version": "1.2.3",
@@ -3691,15 +3177,11 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
 exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden lockfile - foo/x linked, c, old x, removed a 1`] = `
 {
   "name": "tap-testdir-reify-filtered-reification-in-workspaces",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "apps/x": {
       "version": "1.2.3"
-    },
-    "foo/x": {
-      "version": "1.2.3",
-      "extraneous": true
     },
     "node_modules/c": {
       "resolved": "packages/c",
@@ -3712,7 +3194,8 @@ exports[`test/arborist/reify.js TAP filtered reification in workspaces > hidden 
     "node_modules/wrappy": {
       "version": "1.0.0",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.0.tgz",
-      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4="
+      "integrity": "sha1-iq5PxrTNa+MqRVOYW88ys+4THk4=",
+      "license": "ISC"
     },
     "node_modules/x": {
       "resolved": "apps/x",
@@ -4549,10 +4032,10 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP just the shrinkwrap cli-750-fresh > must match snapshot 1`] = `
+exports[`test/arborist/reify.js TAP just the lockfile cli-750-fresh > must match snapshot 1`] = `
 {
   "name": "monorepo",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -4575,26 +4058,15 @@ exports[`test/arborist/reify.js TAP just the shrinkwrap cli-750-fresh > must mat
       "resolved": "lib",
       "link": true
     }
-  },
-  "dependencies": {
-    "app": {
-      "version": "file:app",
-      "requires": {
-        "lib": "file:../lib"
-      }
-    },
-    "lib": {
-      "version": "file:lib"
-    }
   }
 }
 
 `
 
-exports[`test/arborist/reify.js TAP just the shrinkwrap yarn-lock-mkdirp > must match snapshot 1`] = `
+exports[`test/arborist/reify.js TAP just the lockfile yarn-lock-mkdirp > must match snapshot 1`] = `
 {
-  "name": "tap-testdir-reify-just-the-shrinkwrap-yarn-lock-mkdirp",
-  "lockfileVersion": 2,
+  "name": "tap-testdir-reify-just-the-lockfile-yarn-lock-mkdirp",
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -4606,19 +4078,13 @@ exports[`test/arborist/reify.js TAP just the shrinkwrap yarn-lock-mkdirp > must 
       "version": "1.0.2",
       "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.2.tgz",
       "integrity": "sha512-N2REVrJ/X/jGPfit2d7zea2J1pf7EAR5chIUcfHffAZ7gmlam5U65sAm76+o4ntQbSRdTjYf7qZz3chuHlwXEA==",
+      "license": "MIT",
       "bin": {
         "mkdirp": "bin/cmd.js"
       },
       "engines": {
         "node": ">=10"
       }
-    }
-  },
-  "dependencies": {
-    "mkdirp": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.2.tgz",
-      "integrity": "sha512-N2REVrJ/X/jGPfit2d7zea2J1pf7EAR5chIUcfHffAZ7gmlam5U65sAm76+o4ntQbSRdTjYf7qZz3chuHlwXEA=="
     }
   }
 }
@@ -17236,7 +16702,6 @@ Array [
   "reify:retireShallow",
   "reify:save",
   "reify:trash",
-  "reify:trashOmits",
   "reify:unpack",
   "reify:unretire",
   "reifyNode:node_modules/@isaacs/testing-peer-deps-b",
@@ -17744,7 +17209,7 @@ exports[`test/arborist/reify.js TAP packageLockOnly can add deps > must match sn
 exports[`test/arborist/reify.js TAP packageLockOnly can add deps > must match snapshot 2`] = `
 {
   "name": "tap-testdir-reify-packageLockOnly-can-add-deps",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -17755,14 +17220,8 @@ exports[`test/arborist/reify.js TAP packageLockOnly can add deps > must match sn
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-    }
-  },
-  "dependencies": {
-    "abbrev": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     }
   }
 }
@@ -17921,14 +17380,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP reify from old package-lock with bins > should add bins entry to package-lock packages entry 1`] = `
 Object {
-  "dependencies": Object {
-    "ruy": Object {
-      "integrity": "sha512-VYppDTCM6INWUMKlWiKws4nVMuCNU5h+xjF6lj/0y90rLq017/m8aEpNy4zQSZFV2qz66U/hRZwwlSLJ5l5JMQ==",
-      "resolved": "https://registry.npmjs.org/ruy/-/ruy-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "old-package-lock-with-bins",
   "packages": Object {
     "": Object {
@@ -32215,258 +31667,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP reifying with shronk warp dep shrinkwrapped-dep-no-lock > must match snapshot 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/reify.js TAP reifying with shronk warp dep shrinkwrapped-dep-no-lock-empty > must match snapshot 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock-empty",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-no-lock-empty",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/reify.js TAP reifying with shronk warp dep shrinkwrapped-dep-with-lock > must match snapshot 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock",
-  "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/reify.js TAP reifying with shronk warp dep shrinkwrapped-dep-with-lock-empty > must match snapshot 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/shrinkwrapped-dependency" => ArboristNode {
-      "children": Map {
-        "abbrev" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/shrinkwrapped-dependency",
-              "name": "abbrev",
-              "spec": "^1.0.4",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "name": "abbrev",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-          "version": "1.0.4",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/shrinkwrapped-dependency",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "abbrev" => EdgeOut {
-          "name": "abbrev",
-          "spec": "^1.0.4",
-          "to": "node_modules/@isaacs/shrinkwrapped-dependency/node_modules/abbrev",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock-empty/node_modules/@isaacs/shrinkwrapped-dependency",
-      "resolved": "https://registry.npmjs.org/@isaacs/shrinkwrapped-dependency/-/shrinkwrapped-dependency-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/shrinkwrapped-dependency" => EdgeOut {
-      "name": "@isaacs/shrinkwrapped-dependency",
-      "spec": "^1.0.0",
-      "to": "node_modules/@isaacs/shrinkwrapped-dependency",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock-empty",
-  "packageName": "shrinkwrap",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-reifying-with-shronk-warp-dep-shrinkwrapped-dep-with-lock-empty",
-  "version": "1.0.0",
-}
-`
-
 exports[`test/arborist/reify.js TAP rollbacks fail removing retired and deleted nodes > expect resolving Promise 1`] = `
 ArboristNode {
   "children": Map {
@@ -32618,157 +31818,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP rollbacks fail retiring node, but then rimraf fixes it > expect resolving Promise 1`] = `
-ArboristNode {
-  "children": Map {
-    "@isaacs/testing-bundledeps-parent" => ArboristNode {
-      "children": Map {
-        "@isaacs/testing-bundledeps" => ArboristNode {
-          "bundleDependencies": Array [
-            "@isaacs/testing-bundledeps-a",
-          ],
-          "children": Map {
-            "@isaacs/testing-bundledeps-a" => ArboristNode {
-              "bundled": true,
-              "bundler": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-              "edgesIn": Set {
-                EdgeIn {
-                  "from": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-                  "name": "@isaacs/testing-bundledeps-a",
-                  "spec": "*",
-                  "type": "prod",
-                },
-              },
-              "edgesOut": Map {
-                "@isaacs/testing-bundledeps-b" => EdgeOut {
-                  "name": "@isaacs/testing-bundledeps-b",
-                  "spec": "*",
-                  "to": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-b",
-                  "type": "prod",
-                },
-              },
-              "location": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-a",
-              "name": "@isaacs/testing-bundledeps-a",
-              "path": "{CWD}/test/arborist/tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it/node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-a",
-              "resolved": "https://registry.npmjs.org/@isaacs/testing-bundledeps-a/-/testing-bundledeps-a-1.0.0.tgz",
-              "version": "1.0.0",
-            },
-            "@isaacs/testing-bundledeps-b" => ArboristNode {
-              "bundled": true,
-              "bundler": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-              "edgesIn": Set {
-                EdgeIn {
-                  "from": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-a",
-                  "name": "@isaacs/testing-bundledeps-b",
-                  "spec": "*",
-                  "type": "prod",
-                },
-                EdgeIn {
-                  "from": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-c",
-                  "name": "@isaacs/testing-bundledeps-b",
-                  "spec": "*",
-                  "type": "prod",
-                },
-              },
-              "location": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-b",
-              "name": "@isaacs/testing-bundledeps-b",
-              "path": "{CWD}/test/arborist/tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it/node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-b",
-              "resolved": "https://registry.npmjs.org/@isaacs/testing-bundledeps-b/-/testing-bundledeps-b-1.0.0.tgz",
-              "version": "1.0.0",
-            },
-            "@isaacs/testing-bundledeps-c" => ArboristNode {
-              "edgesIn": Set {
-                EdgeIn {
-                  "from": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-                  "name": "@isaacs/testing-bundledeps-c",
-                  "spec": "*",
-                  "type": "prod",
-                },
-              },
-              "edgesOut": Map {
-                "@isaacs/testing-bundledeps-b" => EdgeOut {
-                  "name": "@isaacs/testing-bundledeps-b",
-                  "spec": "*",
-                  "to": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-b",
-                  "type": "prod",
-                },
-              },
-              "location": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-c",
-              "name": "@isaacs/testing-bundledeps-c",
-              "path": "{CWD}/test/arborist/tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it/node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-c",
-              "resolved": "https://registry.npmjs.org/@isaacs/testing-bundledeps-c/-/testing-bundledeps-c-2.0.0.tgz",
-              "version": "2.0.0",
-            },
-          },
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@isaacs/testing-bundledeps-parent",
-              "name": "@isaacs/testing-bundledeps",
-              "spec": "^1.0.0",
-              "type": "prod",
-            },
-          },
-          "edgesOut": Map {
-            "@isaacs/testing-bundledeps-a" => EdgeOut {
-              "name": "@isaacs/testing-bundledeps-a",
-              "spec": "*",
-              "to": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-a",
-              "type": "prod",
-            },
-            "@isaacs/testing-bundledeps-c" => EdgeOut {
-              "name": "@isaacs/testing-bundledeps-c",
-              "spec": "*",
-              "to": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps/node_modules/@isaacs/testing-bundledeps-c",
-              "type": "prod",
-            },
-          },
-          "location": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-          "name": "@isaacs/testing-bundledeps",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it/node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-          "resolved": "https://registry.npmjs.org/@isaacs/testing-bundledeps/-/testing-bundledeps-1.0.0.tgz",
-          "version": "1.0.0",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@isaacs/testing-bundledeps-parent",
-          "spec": "*",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "@isaacs/testing-bundledeps" => EdgeOut {
-          "name": "@isaacs/testing-bundledeps",
-          "spec": "^1.0.0",
-          "to": "node_modules/@isaacs/testing-bundledeps-parent/node_modules/@isaacs/testing-bundledeps",
-          "type": "prod",
-        },
-      },
-      "location": "node_modules/@isaacs/testing-bundledeps-parent",
-      "name": "@isaacs/testing-bundledeps-parent",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it/node_modules/@isaacs/testing-bundledeps-parent",
-      "resolved": "https://registry.npmjs.org/@isaacs/testing-bundledeps-parent/-/testing-bundledeps-parent-2.0.0.tgz",
-      "version": "2.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@isaacs/testing-bundledeps-parent" => EdgeOut {
-      "name": "@isaacs/testing-bundledeps-parent",
-      "spec": "*",
-      "to": "node_modules/@isaacs/testing-bundledeps-parent",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it",
-  "packageName": "testing-bundledeps-3",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-rollbacks-fail-retiring-node-but-then-rimraf-fixes-it",
-  "version": "1.0.0",
-}
-`
-
 exports[`test/arborist/reify.js TAP running lifecycle scripts of unchanged link nodes on reify > result 1`] = `
 ArboristNode {
   "children": Map {
@@ -32821,7 +31870,7 @@ exports[`test/arborist/reify.js TAP save complete lockfile on update-all > shoul
 {
   "name": "save-package-lock-after-update-test",
   "version": "1.0.0",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -32834,14 +31883,8 @@ exports[`test/arborist/reify.js TAP save complete lockfile on update-all > shoul
     "node_modules/abbrev": {
       "version": "1.0.4",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-      "integrity": "sha1-vVWuXkE7oXIu5Mq6H26hBBSlns0="
-    }
-  },
-  "dependencies": {
-    "abbrev": {
-      "version": "1.0.4",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.0.4.tgz",
-      "integrity": "sha1-vVWuXkE7oXIu5Mq6H26hBBSlns0="
+      "integrity": "sha1-vVWuXkE7oXIu5Mq6H26hBBSlns0=",
+      "license": "MIT"
     }
   }
 }
@@ -32852,7 +31895,7 @@ exports[`test/arborist/reify.js TAP save complete lockfile on update-all > shoul
 {
   "name": "save-package-lock-after-update-test",
   "version": "1.0.0",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -32865,14 +31908,8 @@ exports[`test/arborist/reify.js TAP save complete lockfile on update-all > shoul
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-    }
-  },
-  "dependencies": {
-    "abbrev": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     }
   }
 }
@@ -32938,7 +31975,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should not save 
 exports[`test/arborist/reify.js TAP save package.json on update should not save many deps in multiple package.json when using save=false > should update lockfile with many deps updated package.json save=false 1`] = `
 {
   "name": "tap-testdir-reify-save-package.json-on-update-should-not-save-many-deps-in-multiple-package.json-when-using-save-false",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -32968,7 +32005,8 @@ exports[`test/arborist/reify.js TAP save package.json on update should not save 
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     },
     "node_modules/b": {
       "resolved": "b",
@@ -32978,6 +32016,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should not save 
       "version": "1.4.0",
       "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
       "integrity": "sha1-WDsap3WWHUsROsF9nFC6753Xa9E=",
+      "license": "ISC",
       "dependencies": {
         "wrappy": "1"
       }
@@ -32985,40 +32024,8 @@ exports[`test/arborist/reify.js TAP save package.json on update should not save 
     "node_modules/wrappy": {
       "version": "1.0.2",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
-      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8="
-    }
-  },
-  "dependencies": {
-    "a": {
-      "version": "file:a",
-      "requires": {
-        "abbrev": "^1.0.4",
-        "once": "^1.3.2"
-      }
-    },
-    "abbrev": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-    },
-    "b": {
-      "version": "file:b",
-      "requires": {
-        "abbrev": "^1.0.4"
-      }
-    },
-    "once": {
-      "version": "1.4.0",
-      "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
-      "integrity": "sha1-WDsap3WWHUsROsF9nFC6753Xa9E=",
-      "requires": {
-        "wrappy": "1"
-      }
-    },
-    "wrappy": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
-      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8="
+      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8=",
+      "license": "ISC"
     }
   }
 }
@@ -33028,7 +32035,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should not save 
 exports[`test/arborist/reify.js TAP save package.json on update should save many deps in multiple package.json when using save=true > should update lockfile with many deps updated package.json save=true 1`] = `
 {
   "name": "tap-testdir-reify-save-package.json-on-update-should-save-many-deps-in-multiple-package.json-when-using-save-true",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -33058,7 +32065,8 @@ exports[`test/arborist/reify.js TAP save package.json on update should save many
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     },
     "node_modules/b": {
       "resolved": "b",
@@ -33068,6 +32076,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should save many
       "version": "1.4.0",
       "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
       "integrity": "sha1-WDsap3WWHUsROsF9nFC6753Xa9E=",
+      "license": "ISC",
       "dependencies": {
         "wrappy": "1"
       }
@@ -33075,40 +32084,8 @@ exports[`test/arborist/reify.js TAP save package.json on update should save many
     "node_modules/wrappy": {
       "version": "1.0.2",
       "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
-      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8="
-    }
-  },
-  "dependencies": {
-    "a": {
-      "version": "file:a",
-      "requires": {
-        "abbrev": "^1.0.4",
-        "once": "^1.3.2"
-      }
-    },
-    "abbrev": {
-      "version": "1.1.1",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-    },
-    "b": {
-      "version": "file:b",
-      "requires": {
-        "abbrev": "^1.0.4"
-      }
-    },
-    "once": {
-      "version": "1.4.0",
-      "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
-      "integrity": "sha1-WDsap3WWHUsROsF9nFC6753Xa9E=",
-      "requires": {
-        "wrappy": "1"
-      }
-    },
-    "wrappy": {
-      "version": "1.0.2",
-      "resolved": "https://registry.npmjs.org/wrappy/-/wrappy-1.0.2.tgz",
-      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8="
+      "integrity": "sha1-tSQ9jz7BqjXxNkYFvA0QNuMKtp8=",
+      "license": "ISC"
     }
   }
 }
@@ -33148,7 +32125,8 @@ exports[`test/arborist/reify.js TAP save package.json on update should update na
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     },
     "node_modules/b": {
       "resolved": "b",
@@ -33172,7 +32150,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should update na
     "a": {
       "version": "file:a",
       "requires": {
-        "abbrev": "^1.0.4",
+        "abbrev": "^1.1.1",
         "once": "^1.3.2"
       }
     },
@@ -33184,7 +32162,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should update na
     "b": {
       "version": "file:b",
       "requires": {
-        "abbrev": "^1.0.4"
+        "abbrev": "^1.1.1"
       }
     },
     "once": {
@@ -33248,6 +32226,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should update si
       "version": "1.4.0",
       "resolved": "https://registry.npmjs.org/once/-/once-1.4.0.tgz",
       "integrity": "sha1-WDsap3WWHUsROsF9nFC6753Xa9E=",
+      "license": "ISC",
       "dependencies": {
         "wrappy": "1"
       }
@@ -33263,7 +32242,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should update si
       "version": "file:a",
       "requires": {
         "abbrev": "^1.0.4",
-        "once": "^1.3.2"
+        "once": "^1.4.0"
       }
     },
     "abbrev": {
@@ -33298,7 +32277,7 @@ exports[`test/arborist/reify.js TAP save package.json on update should update si
 exports[`test/arborist/reify.js TAP save proper lockfile with bins when upgrading lockfile complete=false > should upgrade, with bins in place 1`] = `
 {
   "name": "tap-testdir-reify-save-proper-lockfile-with-bins-when-upgrading-lockfile-complete-false",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -33316,13 +32295,6 @@ exports[`test/arborist/reify.js TAP save proper lockfile with bins when upgradin
       "engines": {
         "node": ">=10"
       }
-    }
-  },
-  "dependencies": {
-    "semver": {
-      "version": "7.3.2",
-      "resolved": "https://registry.npmjs.org/semver/-/semver-7.3.2.tgz",
-      "integrity": "sha512-OrOb32TeeambH6UrhtShmF7CRDqhL6/5XpPNp2DuRH6+9QLw/orhp72j87v8Qa1ScDkvrrBNpZcDejAirJmfXQ=="
     }
   }
 }
@@ -33332,7 +32304,7 @@ exports[`test/arborist/reify.js TAP save proper lockfile with bins when upgradin
 exports[`test/arborist/reify.js TAP save proper lockfile with bins when upgrading lockfile complete=true > should upgrade, with bins in place 1`] = `
 {
   "name": "tap-testdir-reify-save-proper-lockfile-with-bins-when-upgrading-lockfile-complete-true",
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "requires": true,
   "packages": {
     "": {
@@ -33350,13 +32322,6 @@ exports[`test/arborist/reify.js TAP save proper lockfile with bins when upgradin
       "engines": {
         "node": ">=10"
       }
-    }
-  },
-  "dependencies": {
-    "semver": {
-      "version": "7.3.2",
-      "resolved": "https://registry.npmjs.org/semver/-/semver-7.3.2.tgz",
-      "integrity": "sha512-OrOb32TeeambH6UrhtShmF7CRDqhL6/5XpPNp2DuRH6+9QLw/orhp72j87v8Qa1ScDkvrrBNpZcDejAirJmfXQ=="
     }
   }
 }
@@ -33373,46 +32338,7 @@ exports[`test/arborist/reify.js TAP saveBundle > must match snapshot 1`] = `
 
 exports[`test/arborist/reify.js TAP saving the ideal tree save some stuff > lock after save 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "extraneous": true,
-      "from": "a@git+ssh://git@github.com:foo/bar#baz",
-      "version": "git+ssh://git@github.com:foo/bar#71f3ccfefba85d2048484569dba8c1829f6f41d7",
-    },
-    "b": Object {
-      "extraneous": true,
-      "resolved": "https://registry.npmjs.org/b/-/b-1.2.3.tgz",
-      "version": "1.2.3",
-    },
-    "c": Object {
-      "extraneous": true,
-      "from": "c@git+ssh://git@githost.com:a/b/c.git#master",
-      "version": "git+ssh://git@githost.com:a/b/c.git#71f3ccfefba85d2048484569dba8c1829f6f41d7",
-    },
-    "d": Object {
-      "extraneous": true,
-      "resolved": "https://registry.npmjs.org/c/-/c-1.2.3.tgz",
-      "version": "npm:c@1.2.3",
-    },
-    "e": Object {
-      "version": "file:e",
-    },
-    "f": Object {
-      "extraneous": true,
-      "from": "f@git+https://user:pass@github.com/baz/quux#asdf",
-      "version": "git+https://user:pass@github.com/baz/quux#71f3ccfefba85d2048484569dba8c1829f6f41d7",
-    },
-    "g": Object {
-      "extraneous": true,
-      "resolved": "https://registry.npmjs.org/g/-/g-1.2.3.tgz",
-    },
-    "h": Object {
-      "extraneous": true,
-      "resolved": "https://registry.npmjs.org/h/-/h-1.2.3.tgz",
-      "version": "1.2.3",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "tap-testdir-reify-saving-the-ideal-tree-save-some-stuff",
   "packages": Object {
     "": Object {
@@ -33436,9 +32362,6 @@ Object {
       "workspaces": Array [
         "e",
       ],
-    },
-    "e": Object {
-      "extraneous": true,
     },
     "node_modules/a": Object {
       "extraneous": true,
@@ -33489,25 +32412,6 @@ exports[`test/arborist/reify.js TAP scoped registries > should preserve original
 @ruyadorno/theoretically-private-pkg@https://npm.pkg.github.com/@ruyadorno/theoretically-private-pkg/-/theoretically-private-pkg-1.2.3.tgz
 `
 
-exports[`test/arborist/reify.js TAP still do not install optional deps with mismatched platform specifications even when forced > expect resolving Promise 1`] = `
-ArboristNode {
-  "edgesOut": Map {
-    "platform-specifying-test-package" => EdgeOut {
-      "name": "platform-specifying-test-package",
-      "spec": "1.0.0",
-      "to": null,
-      "type": "optional",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-still-do-not-install-optional-deps-with-mismatched-platform-specifications-even-when-forced",
-  "packageName": "platform-test",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-still-do-not-install-optional-deps-with-mismatched-platform-specifications-even-when-forced",
-  "version": "1.0.0",
-}
-`
-
 exports[`test/arborist/reify.js TAP store files with a custom indenting > must match snapshot 1`] = `
 {
 	"name": "tab-indented-package-json",
@@ -33523,7 +32427,7 @@ exports[`test/arborist/reify.js TAP store files with a custom indenting > must m
 {
 	"name": "tab-indented-package-json",
 	"version": "1.0.0",
-	"lockfileVersion": 2,
+	"lockfileVersion": 3,
 	"requires": true,
 	"packages": {
 		"": {
@@ -33536,14 +32440,8 @@ exports[`test/arborist/reify.js TAP store files with a custom indenting > must m
 		"node_modules/abbrev": {
 			"version": "1.1.1",
 			"resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-			"integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-		}
-	},
-	"dependencies": {
-		"abbrev": {
-			"version": "1.1.1",
-			"resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-			"integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+			"integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+			"license": "ISC"
 		}
 	}
 }
@@ -34126,216 +33024,6 @@ ArboristNode {
 }
 `
 
-exports[`test/arborist/reify.js TAP tracks changes of shrinkwrapped dep correctly > install added the correct tree 1`] = `
-ArboristNode {
-  "children": Map {
-    "@nlf/shrinkwrapped-dep-updates-a" => ArboristNode {
-      "children": Map {
-        "@nlf/shrinkwrapped-dep-updates-b" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-              "name": "@nlf/shrinkwrapped-dep-updates-b",
-              "spec": "^1.0.0",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-b",
-          "name": "@nlf/shrinkwrapped-dep-updates-b",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-b",
-          "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-b/-/shrinkwrapped-dep-updates-b-1.0.0.tgz",
-          "version": "1.0.0",
-        },
-        "@nlf/shrinkwrapped-dep-updates-c" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-              "name": "@nlf/shrinkwrapped-dep-updates-c",
-              "spec": "^1.0.0",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-c",
-          "name": "@nlf/shrinkwrapped-dep-updates-c",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-c",
-          "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-c/-/shrinkwrapped-dep-updates-c-1.0.0.tgz",
-          "version": "1.0.0",
-        },
-        "@nlf/shrinkwrapped-dep-updates-d" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-              "name": "@nlf/shrinkwrapped-dep-updates-d",
-              "spec": "^1.0.0",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-d",
-          "name": "@nlf/shrinkwrapped-dep-updates-d",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-d",
-          "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-d/-/shrinkwrapped-dep-updates-d-1.0.0.tgz",
-          "version": "1.0.0",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@nlf/shrinkwrapped-dep-updates-a",
-          "spec": "^1.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "@nlf/shrinkwrapped-dep-updates-b" => EdgeOut {
-          "name": "@nlf/shrinkwrapped-dep-updates-b",
-          "spec": "^1.0.0",
-          "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-b",
-          "type": "prod",
-        },
-        "@nlf/shrinkwrapped-dep-updates-c" => EdgeOut {
-          "name": "@nlf/shrinkwrapped-dep-updates-c",
-          "spec": "^1.0.0",
-          "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-c",
-          "type": "prod",
-        },
-        "@nlf/shrinkwrapped-dep-updates-d" => EdgeOut {
-          "name": "@nlf/shrinkwrapped-dep-updates-d",
-          "spec": "^1.0.0",
-          "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-d",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-      "name": "@nlf/shrinkwrapped-dep-updates-a",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a",
-      "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-a/-/shrinkwrapped-dep-updates-a-1.0.0.tgz",
-      "version": "1.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@nlf/shrinkwrapped-dep-updates-a" => EdgeOut {
-      "name": "@nlf/shrinkwrapped-dep-updates-a",
-      "spec": "^1.0.0",
-      "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly",
-}
-`
-
-exports[`test/arborist/reify.js TAP tracks changes of shrinkwrapped dep correctly > installing new version brings in the correct children 1`] = `
-ArboristNode {
-  "children": Map {
-    "@nlf/shrinkwrapped-dep-updates-a" => ArboristNode {
-      "children": Map {
-        "@nlf/shrinkwrapped-dep-updates-b" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-              "name": "@nlf/shrinkwrapped-dep-updates-b",
-              "spec": "^2.0.0",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-b",
-          "name": "@nlf/shrinkwrapped-dep-updates-b",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-b",
-          "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-b/-/shrinkwrapped-dep-updates-b-2.0.0.tgz",
-          "version": "2.0.0",
-        },
-        "@nlf/shrinkwrapped-dep-updates-c" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-              "name": "@nlf/shrinkwrapped-dep-updates-c",
-              "spec": "^1.0.0",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-c",
-          "name": "@nlf/shrinkwrapped-dep-updates-c",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-c",
-          "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-c/-/shrinkwrapped-dep-updates-c-1.0.0.tgz",
-          "version": "1.0.0",
-        },
-        "@nlf/shrinkwrapped-dep-updates-e" => ArboristNode {
-          "edgesIn": Set {
-            EdgeIn {
-              "from": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-              "name": "@nlf/shrinkwrapped-dep-updates-e",
-              "spec": "^1.0.0",
-              "type": "prod",
-            },
-          },
-          "inShrinkwrap": true,
-          "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-e",
-          "name": "@nlf/shrinkwrapped-dep-updates-e",
-          "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-e",
-          "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-e/-/shrinkwrapped-dep-updates-e-1.0.0.tgz",
-          "version": "1.0.0",
-        },
-      },
-      "edgesIn": Set {
-        EdgeIn {
-          "from": "",
-          "name": "@nlf/shrinkwrapped-dep-updates-a",
-          "spec": "^2.0.0",
-          "type": "prod",
-        },
-      },
-      "edgesOut": Map {
-        "@nlf/shrinkwrapped-dep-updates-b" => EdgeOut {
-          "name": "@nlf/shrinkwrapped-dep-updates-b",
-          "spec": "^2.0.0",
-          "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-b",
-          "type": "prod",
-        },
-        "@nlf/shrinkwrapped-dep-updates-c" => EdgeOut {
-          "name": "@nlf/shrinkwrapped-dep-updates-c",
-          "spec": "^1.0.0",
-          "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-c",
-          "type": "prod",
-        },
-        "@nlf/shrinkwrapped-dep-updates-e" => EdgeOut {
-          "name": "@nlf/shrinkwrapped-dep-updates-e",
-          "spec": "^1.0.0",
-          "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a/node_modules/@nlf/shrinkwrapped-dep-updates-e",
-          "type": "prod",
-        },
-      },
-      "hasShrinkwrap": true,
-      "location": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-      "name": "@nlf/shrinkwrapped-dep-updates-a",
-      "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly/node_modules/@nlf/shrinkwrapped-dep-updates-a",
-      "resolved": "https://registry.npmjs.org/@nlf/shrinkwrapped-dep-updates-a/-/shrinkwrapped-dep-updates-a-2.0.0.tgz",
-      "version": "2.0.0",
-    },
-  },
-  "edgesOut": Map {
-    "@nlf/shrinkwrapped-dep-updates-a" => EdgeOut {
-      "name": "@nlf/shrinkwrapped-dep-updates-a",
-      "spec": "^2.0.0",
-      "to": "node_modules/@nlf/shrinkwrapped-dep-updates-a",
-      "type": "prod",
-    },
-  },
-  "isProjectRoot": true,
-  "location": "",
-  "name": "tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly",
-  "path": "{CWD}/test/arborist/tap-testdir-reify-tracks-changes-of-shrinkwrapped-dep-correctly",
-}
-`
-
 exports[`test/arborist/reify.js TAP transitive deps containing asymmetrical bin no lockfile > expect resolving Promise 1`] = `
 ArboristNode {
   "children": Map {
@@ -34589,16 +33277,6 @@ ArboristNode {
   "packageName": "test-bin-added-transitive-deps",
   "path": "{CWD}/test/arborist/tap-testdir-reify-transitive-deps-containing-asymmetrical-bin-with-lockfile",
   "version": "1.0.0",
-}
-`
-
-exports[`test/arborist/reify.js TAP update a bundling node without updating all of its deps > contains fsevents in lockfile 1`] = `
-Object {
-  "dev": true,
-  "integrity": "sha512-R4wDiBwZ0KzpgOWetKDug1FZcYhqYnUYKtfZYt4mD5SBz76q0KR4Q9o7GIPamsVPGmW3EYPPJ0dOOjvx32ldZA==",
-  "optional": true,
-  "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.1.2.tgz",
-  "version": "2.1.2",
 }
 `
 
@@ -47035,15 +45713,15 @@ exports[`test/arborist/reify.js TAP update a yarn.lock file > updated yarn lock 
 # yarn lockfile v1
 
 
-"abbrev@^1.1.1":
-  "integrity" "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
-  "resolved" "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz"
-  "version" "1.1.1"
+abbrev@^1.1.1:
+  version "1.1.1"
+  resolved "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz"
+  integrity sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==
 
-"mkdirp@^1.0.2":
-  "integrity" "sha512-N2REVrJ/X/jGPfit2d7zea2J1pf7EAR5chIUcfHffAZ7gmlam5U65sAm76+o4ntQbSRdTjYf7qZz3chuHlwXEA=="
-  "resolved" "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.2.tgz"
-  "version" "1.0.2"
+mkdirp@^1.0.2:
+  version "1.0.2"
+  resolved "https://registry.npmjs.org/mkdirp/-/mkdirp-1.0.2.tgz"
+  integrity sha512-N2REVrJ/X/jGPfit2d7zea2J1pf7EAR5chIUcfHffAZ7gmlam5U65sAm76+o4ntQbSRdTjYf7qZz3chuHlwXEA==
 
 `
 
@@ -47077,7 +45755,8 @@ exports[`test/arborist/reify.js TAP warn and correct if damaged data in lockfile
     "node_modules/abbrev": {
       "version": "1.1.1",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q=="
+      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC"
     }
   },
   "dependencies": {
@@ -53441,6 +52120,7 @@ Object {
     },
     "node_modules/abbrev": Object {
       "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
       "version": "1.1.1",
     },
@@ -53756,18 +52436,7 @@ ArboristNode {
 
 exports[`test/arborist/reify.js TAP workspaces reify workspaces lockfile > should lock workspaces config 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "requires": Object {
-        "b": "^1.0.0",
-      },
-      "version": "file:a",
-    },
-    "b": Object {
-      "version": "file:b",
-    },
-  },
-  "lockfileVersion": 2,
+  "lockfileVersion": 3,
   "name": "workspace-simple",
   "packages": Object {
     "": Object {
@@ -53799,49 +52468,42 @@ Object {
 }
 `
 
-exports[`test/arborist/reify.js TAP workspaces root as-a-workspace > should produce expected package-lock file 1`] = `
+exports[`test/arborist/reify.js TAP workspaces reify workspaces with overrides > should retain override version (4.1.3) 1`] = `
 Object {
-  "dependencies": Object {
-    "a": Object {
-      "requires": Object {
-        "abbrev": "^1.0.0",
-      },
-      "version": "file:a",
+  "lockfileVersion": 3,
+  "name": "workspace-with-overrides",
+  "packages": Object {
+    "": Object {
+      "name": "workspace-with-overrides",
+      "workspaces": Array [
+        "ws",
+      ],
     },
-    "abbrev": Object {
-      "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
-      "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-      "version": "1.1.1",
+    "node_modules/a": Object {
+      "link": true,
+      "resolved": "ws",
     },
-    "b": Object {
-      "version": "file:b",
+    "node_modules/arg": Object {
+      "integrity": "sha512-58S9QDqG0Xx27YwPSt9fJxivjYl432YCwfDMfZ+71RAqUrZef7LrKQZ3LHLOwCS4FLNBplP533Zx895SeOCHvA==",
+      "license": "MIT",
+      "resolved": "https://registry.npmjs.org/arg/-/arg-4.1.3.tgz",
+      "version": "4.1.3",
     },
-    "workspaces-root-linked": Object {
+    "ws": Object {
       "dependencies": Object {
-        "a": Object {
-          "requires": Object {
-            "abbrev": "^1.0.0",
-          },
-          "version": "file:a",
-        },
-        "abbrev": Object {
-          "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
-          "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
-          "version": "1.1.1",
-        },
-        "b": Object {
-          "version": "file:b",
-        },
+        "arg": "4.1.2",
       },
-      "requires": Object {
-        "a": "file:a",
-        "b": "file:b",
-        "workspaces-root-linked": "file:",
-      },
-      "version": "file:",
+      "name": "a",
+      "version": "1.0.0",
     },
   },
-  "lockfileVersion": 2,
+  "requires": true,
+}
+`
+
+exports[`test/arborist/reify.js TAP workspaces root as-a-workspace > should produce expected package-lock file 1`] = `
+Object {
+  "lockfileVersion": 3,
   "name": "workspaces-root-linked",
   "packages": Object {
     "": Object {
@@ -53868,6 +52530,7 @@ Object {
     },
     "node_modules/abbrev": Object {
       "integrity": "sha512-nne9/IiQ/hzIhY6pdDnbBtz7DjPTKrY00P/zvPSm5pOFkl6xuGrGnXn/VtTNNfNtAfZ9/1RtehkszU9qcTii0Q==",
+      "license": "ISC",
       "resolved": "https://registry.npmjs.org/abbrev/-/abbrev-1.1.1.tgz",
       "version": "1.1.1",
     },

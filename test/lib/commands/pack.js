@@ -1,12 +1,11 @@
 const t = require('tap')
 const { load: loadMockNpm } = require('../../fixtures/mock-npm')
-const path = require('path')
-const fs = require('fs')
+const { cleanZlib } = require('../../fixtures/clean-snapshot')
+const MockRegistry = require('@npmcli/mock-registry')
+const path = require('node:path')
+const fs = require('node:fs')
 
-const cwd = process.cwd()
-t.afterEach(t => {
-  process.chdir(cwd)
-})
+t.cleanSnapshot = data => cleanZlib(data)
 
 t.test('should pack current directory with no arguments', async t => {
   const { npm, outputs, logs } = await loadMockNpm(t, {
@@ -17,11 +16,10 @@ t.test('should pack current directory with no arguments', async t => {
       }),
     },
   })
-  process.chdir(npm.prefix)
   await npm.exec('pack', [])
   const filename = 'test-package-1.0.0.tgz'
-  t.strictSame(outputs, [[filename]])
-  t.matchSnapshot(logs.notice.map(([, m]) => m), 'logs pack contents')
+  t.strictSame(outputs, [filename])
+  t.matchSnapshot(logs.notice, 'logs pack contents')
   t.ok(fs.statSync(path.resolve(npm.prefix, filename)))
 })
 
@@ -34,12 +32,11 @@ t.test('follows pack-destination config', async t => {
       }),
       'tar-destination': {},
     },
+    config: ({ prefix }) => ({ 'pack-destination': path.join(prefix, 'tar-destination') }),
   })
-  process.chdir(npm.prefix)
-  npm.config.set('pack-destination', path.join(npm.prefix, 'tar-destination'))
   await npm.exec('pack', [])
   const filename = 'test-package-1.0.0.tgz'
-  t.strictSame(outputs, [[filename]])
+  t.strictSame(outputs, [filename])
   t.ok(fs.statSync(path.resolve(npm.prefix, 'tar-destination', filename)))
 })
 
@@ -52,10 +49,9 @@ t.test('should pack given directory for scoped package', async t => {
       }),
     },
   })
-  process.chdir(npm.prefix)
   await npm.exec('pack', [])
   const filename = 'npm-test-package-1.0.0.tgz'
-  t.strictSame(outputs, [[filename]])
+  t.strictSame(outputs, [filename])
   t.ok(fs.statSync(path.resolve(npm.prefix, filename)))
 })
 
@@ -67,13 +63,35 @@ t.test('should log output as valid json', async t => {
         version: '1.0.0',
       }),
     },
+    config: { json: true },
   })
-  process.chdir(npm.prefix)
-  npm.config.set('json', true)
   await npm.exec('pack', [])
   const filename = 'test-package-1.0.0.tgz'
   t.matchSnapshot(outputs.map(JSON.parse), 'outputs as json')
-  t.matchSnapshot(logs.notice.map(([, m]) => m), 'logs pack contents')
+  t.matchSnapshot(logs.notice, 'logs pack contents')
+  t.ok(fs.statSync(path.resolve(npm.prefix, filename)))
+})
+
+t.test('should log scoped package output as valid json', async t => {
+  const { npm, outputs, logs } = await loadMockNpm(t, {
+    prefixDir: {
+      'package.json': JSON.stringify({
+        name: '@myscope/test-package',
+        version: '1.0.0',
+        scripts: {
+          prepack: 'echo prepack!',
+        },
+      }),
+    },
+    config: {
+      json: true,
+      progress: false,
+    },
+  })
+  await npm.exec('pack', [])
+  const filename = 'myscope-test-package-1.0.0.tgz'
+  t.matchSnapshot(outputs.map(JSON.parse), 'outputs as json')
+  t.matchSnapshot(logs.notice, 'logs pack contents')
   t.ok(fs.statSync(path.resolve(npm.prefix, filename)))
 })
 
@@ -85,14 +103,138 @@ t.test('dry run', async t => {
         version: '1.0.0',
       }),
     },
+    config: { 'dry-run': true },
   })
-  npm.config.set('dry-run', true)
-  process.chdir(npm.prefix)
   await npm.exec('pack', [])
   const filename = 'test-package-1.0.0.tgz'
-  t.strictSame(outputs, [[filename]])
-  t.matchSnapshot(logs.notice.map(([, m]) => m), 'logs pack contents')
+  t.strictSame(outputs, [filename])
+  t.matchSnapshot(logs.notice, 'logs pack contents')
   t.throws(() => fs.statSync(path.resolve(npm.prefix, filename)))
+})
+
+for (const allowDirectory of ['none', 'root']) {
+  t.test(`dry run with allow-directory=${allowDirectory}`, async t => {
+    const { npm, outputs } = await loadMockNpm(t, {
+      prefixDir: {
+        'package.json': JSON.stringify({
+          name: 'test-package',
+          version: '1.0.0',
+        }),
+      },
+      config: {
+        'allow-directory': allowDirectory,
+        'dry-run': true,
+      },
+    })
+    await npm.exec('pack', [])
+    t.strictSame(outputs, ['test-package-1.0.0.tgz'])
+  })
+}
+
+t.test('foreground-scripts defaults to true', async t => {
+  const { npm, outputs, logs } = await loadMockNpm(t, {
+    prefixDir: {
+      'package.json': JSON.stringify({
+        name: 'test-fg-scripts',
+        version: '0.0.0',
+        scripts: {
+          prepack: 'echo prepack!',
+          postpack: 'echo postpack!',
+        },
+      }
+      ),
+    },
+    config: { 'dry-run': true },
+  })
+
+  await npm.exec('pack', [])
+  const filename = 'test-fg-scripts-0.0.0.tgz'
+  t.strictSame(
+    outputs,
+    [filename],
+    'tarball filename is the only stdout output'
+  )
+  t.matchSnapshot(logs.notice, 'logs pack contents')
+  t.throws(() => fs.statSync(path.resolve(npm.prefix, filename)))
+})
+
+t.test('foreground-scripts can still be set to false', async t => {
+  const { npm, outputs, logs } = await loadMockNpm(t, {
+    prefixDir: {
+      'package.json': JSON.stringify({
+        name: 'test-fg-scripts',
+        version: '0.0.0',
+        scripts: {
+          prepack: 'echo prepack!',
+          postpack: 'echo postpack!',
+        },
+      }
+      ),
+    },
+    config: { 'dry-run': true, 'foreground-scripts': false },
+  })
+
+  await npm.exec('pack', [])
+  const filename = 'test-fg-scripts-0.0.0.tgz'
+
+  t.strictSame(outputs, [filename], 'prepack and postpack do not log to stdout')
+  t.matchSnapshot(logs.notice, 'logs pack contents')
+  t.throws(() => fs.statSync(path.resolve(npm.prefix, filename)))
+})
+
+t.test('min-release-age-exclude applies to registry packages', async t => {
+  const name = '@myscope/some-package'
+  const version = '1.2.3'
+  const { npm, outputs } = await loadMockNpm(t, {
+    prefixDir: {
+      package: {
+        'package.json': JSON.stringify({ name, version }),
+      },
+    },
+    config: {
+      'min-release-age': 7,
+      'min-release-age-exclude': ['@myscope/*'],
+    },
+  })
+  const registry = new MockRegistry({
+    tap: t,
+    registry: npm.config.get('registry'),
+  })
+  const manifest = registry.manifest({ name, versions: [version] })
+  await registry.package({
+    manifest,
+    times: 2,
+    tarballs: { [version]: path.join(npm.prefix, 'package') },
+  })
+
+  await npm.exec('pack', [`${name}@${version}`])
+
+  const filename = 'myscope-some-package-1.2.3.tgz'
+  t.strictSame(outputs, [filename])
+  t.ok(fs.statSync(path.resolve(npm.prefix, filename)))
+})
+
+t.test('excluded alias name does not bypass min-release-age for its target', async t => {
+  const target = 'other-package'
+  const version = '1.2.3'
+  const { npm } = await loadMockNpm(t, {
+    config: {
+      'min-release-age': 7,
+      'min-release-age-exclude': ['@myscope/*'],
+    },
+  })
+  const registry = new MockRegistry({
+    tap: t,
+    registry: npm.config.get('registry'),
+  })
+  await registry.package({
+    manifest: registry.manifest({ name: target, versions: [version] }),
+  })
+
+  await t.rejects(
+    npm.exec('pack', [`@myscope/alias@npm:${target}@${version}`]),
+    { code: 'ETARGET' }
+  )
 })
 
 t.test('invalid packument', async t => {
@@ -101,7 +243,6 @@ t.test('invalid packument', async t => {
       'package.json': '{}',
     },
   })
-  process.chdir(npm.prefix)
   await t.rejects(
     npm.exec('pack', []),
     /Invalid package, must have name and version/
@@ -110,7 +251,7 @@ t.test('invalid packument', async t => {
 })
 
 t.test('workspaces', async t => {
-  const loadWorkspaces = (t) => loadMockNpm(t, {
+  const loadWorkspaces = (t, config = { workspaces: true }) => loadMockNpm(t, {
     prefixDir: {
       'package.json': JSON.stringify(
         {
@@ -135,7 +276,7 @@ t.test('workspaces', async t => {
       },
     },
     config: {
-      workspaces: true,
+      ...config,
       // TODO: this is a workaround for npm run test-all
       // somehow leaking include-workspace-root
       'include-workspace-root': false,
@@ -144,29 +285,27 @@ t.test('workspaces', async t => {
 
   t.test('all workspaces', async t => {
     const { npm, outputs } = await loadWorkspaces(t)
-    process.chdir(npm.prefix)
     await npm.exec('pack', [])
-    t.strictSame(outputs, [['workspace-a-1.0.0.tgz'], ['workspace-b-1.0.0.tgz']])
+    t.strictSame(outputs, ['workspace-a-1.0.0.tgz', 'workspace-b-1.0.0.tgz'])
   })
 
   t.test('all workspaces, `.` first arg', async t => {
     const { npm, outputs } = await loadWorkspaces(t)
-    process.chdir(npm.prefix)
     await npm.exec('pack', ['.'])
-    t.strictSame(outputs, [['workspace-a-1.0.0.tgz'], ['workspace-b-1.0.0.tgz']])
+    t.strictSame(outputs, ['workspace-a-1.0.0.tgz', 'workspace-b-1.0.0.tgz'])
   })
 
   t.test('one workspace', async t => {
-    const { npm, outputs } = await loadWorkspaces(t)
-    process.chdir(npm.prefix)
-    await npm.exec('pack', ['workspace-a'])
-    t.strictSame(outputs, [['workspace-a-1.0.0.tgz']])
+    const { npm, outputs } = await loadWorkspaces(t, {
+      workspace: ['workspace-a'],
+    })
+    await npm.exec('pack', [])
+    t.strictSame(outputs, ['workspace-a-1.0.0.tgz'])
   })
 
   t.test('specific package', async t => {
     const { npm, outputs } = await loadWorkspaces(t)
-    process.chdir(npm.prefix)
     await npm.exec('pack', [npm.prefix])
-    t.strictSame(outputs, [['workspaces-test-1.0.0.tgz']])
+    t.strictSame(outputs, ['workspaces-test-1.0.0.tgz'])
   })
 })

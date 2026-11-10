@@ -1,30 +1,30 @@
 const t = require('tap')
 const _trashList = Symbol.for('trashList')
-const Arborist = require('../../lib/arborist/index.js')
-const { resolve, dirname } = require('path')
-const os = require('os')
-const fs = require('fs')
+const Arborist = require('../..')
+const { resolve, dirname } = require('node:path')
+const os = require('node:os')
+const fs = require('node:fs')
 const fixtures = resolve(__dirname, '../fixtures')
 const relpath = require('../../lib/relpath.js')
 const localeCompare = require('@isaacs/string-locale-compare')('en')
+const MockRegistry = require('@npmcli/mock-registry')
 
 const fixture = (t, p) => require(`${fixtures}/reify-cases/${p}`)(t)
 
-const isWindows = process.platform === 'win32'
-const PORT = 12345 + (+process.env.TAP_CHILD_ID || 0)
-
-const server = require('http').createServer(() => {
-  throw new Error('rebuild should not hit the registry')
+// Spin up a new mock registry with no mocks in strict mode so we ensure that no requests are made
+new MockRegistry({
+  strict: true,
+  tap: t,
+  registry: 'https://registry.npmjs.org',
 })
-t.before(() => new Promise(res => {
-  server.listen(PORT, () => {
-    t.teardown(() => server.close())
-    res()
-  })
-}))
 
-const registry = `http://localhost:${PORT}`
-const newArb = opt => new Arborist({ ...opt, registry })
+const isWindows = process.platform === 'win32'
+
+// Most rebuild tests pre-date the allowScripts gate and assert that
+// install scripts run. Bypass the default-deny in this suite by
+// default; individual tests that want to assert the gate's behaviour
+// override the option explicitly.
+const newArb = opt => new Arborist({ dangerouslyAllowAllScripts: true, ...opt })
 
 // track the logs that are emitted.  returns a function that removes
 // the listener and provides the list of what it saw.
@@ -118,6 +118,145 @@ t.test('do not run scripts if ignoreScripts=true', async t => {
   t.throws(() => fs.statSync(file), 'bundle build script not run')
 })
 
+t.test('bundled deps cannot be allowlisted: gate blocks their scripts', async t => {
+  // With the gate active, a bundled dep's script must not run even with an
+  // explicit allow: scripts only run when isScriptAllowed returns true, and
+  // bundled deps return null.
+  const path = fixture(t, 'testing-rebuild-bundle-reified')
+  const file = resolve(path, 'node_modules/@isaacs/testing-rebuild-bundle-a/node_modules/@isaacs/testing-rebuild-bundle-b/cwd')
+  t.throws(() => fs.statSync(file), 'file not there already (gut check)')
+  const arb = new Arborist({
+    path,
+    allowScripts: { '@isaacs/testing-rebuild-bundle-b': true },
+  })
+  await arb.rebuild()
+  t.throws(() => fs.statSync(file), 'bundled dep postinstall did not run despite explicit allow')
+})
+
+t.test('allowScripts deny entry skips the build set entry for that node', async t => {
+  // Verifies the deny gate in #addToBuildSet: when `allowScripts` resolves
+  // a node's policy to `false`, that node's scripts are skipped while
+  // others continue to run.
+  const path = fixture(t, 'testing-rebuild-script-env-flags')
+  const arb = newArb({
+    path,
+    allowScripts: { devdep: false, devopt: true },
+    dangerouslyAllowAllScripts: false,
+  })
+  await arb.rebuild()
+  // devdep is denied — its postinstall must NOT have produced the `env`
+  // file inside its directory.
+  t.throws(
+    () => fs.statSync(resolve(path, 'node_modules/devdep/env')),
+    'devdep postinstall did not run'
+  )
+  // devopt is not denied, so its postinstall still runs.
+  t.equal(
+    fs.statSync(resolve(path, 'node_modules/devopt/env')).isFile(),
+    true,
+    'devopt postinstall ran'
+  )
+})
+
+t.test('dangerouslyAllowAllScripts bypasses the deny gate', async t => {
+  // Same setup as above, but the escape hatch must let denied scripts run.
+  const path = fixture(t, 'testing-rebuild-script-env-flags')
+  const arb = newArb({
+    path,
+    allowScripts: { devdep: false },
+    dangerouslyAllowAllScripts: true,
+  })
+  await arb.rebuild()
+  t.equal(
+    fs.statSync(resolve(path, 'node_modules/devdep/env')).isFile(),
+    true,
+    'devdep postinstall ran despite deny entry'
+  )
+})
+
+t.test('allowScripts gates local file: dep scripts (npm/cli#9498)', async t => {
+  const aPrepare = p => resolve(p, 'a/a-prepare')
+  const aPostinstall = p => resolve(p, 'a/a-post-install')
+
+  t.test('true: scripts run when the target is allowed', async t => {
+    const path = fixture(t, 'link-dep-lifecycle-scripts')
+    const arb = newArb({
+      path,
+      allowScripts: { 'file:../a': true },
+      dangerouslyAllowAllScripts: false,
+    })
+    await arb.rebuild()
+    t.equal(fs.statSync(aPrepare(path)).isFile(), true, 'prepare ran')
+    t.equal(fs.statSync(aPostinstall(path)).isFile(), true, 'postinstall ran')
+  })
+
+  t.test('false: deny entry blocks the scripts', async t => {
+    const path = fixture(t, 'link-dep-lifecycle-scripts')
+    const arb = newArb({
+      path,
+      allowScripts: { 'file:../a': false },
+      dangerouslyAllowAllScripts: false,
+    })
+    await arb.rebuild()
+    t.throws(() => fs.statSync(aPrepare(path)), 'prepare did not run')
+    t.throws(() => fs.statSync(aPostinstall(path)), 'postinstall did not run')
+  })
+
+  t.test('absent: default-deny blocks the scripts', async t => {
+    const path = fixture(t, 'link-dep-lifecycle-scripts')
+    const arb = newArb({
+      path,
+      allowScripts: {},
+      dangerouslyAllowAllScripts: false,
+    })
+    await arb.rebuild()
+    t.throws(() => fs.statSync(aPrepare(path)), 'prepare did not run')
+    t.throws(() => fs.statSync(aPostinstall(path)), 'postinstall did not run')
+  })
+
+  t.test('dangerouslyAllowAllScripts bypasses the gate for file: deps', async t => {
+    const path = fixture(t, 'link-dep-lifecycle-scripts')
+    const arb = newArb({ path, dangerouslyAllowAllScripts: true })
+    await arb.rebuild()
+    t.equal(fs.statSync(aPrepare(path)).isFile(), true, 'prepare ran')
+    t.equal(fs.statSync(aPostinstall(path)).isFile(), true, 'postinstall ran')
+  })
+})
+
+t.test('workspaces bypass the allowScripts gate (owner-managed)', async t => {
+  // Workspaces are owner-managed, so their scripts run regardless of the
+  // allowScripts policy. This must survive the #9498 fix that stopped
+  // bypassing all link nodes.
+  const path = t.testdir({
+    'package.json': JSON.stringify({
+      name: 'ws-root',
+      version: '1.0.0',
+      workspaces: ['ws'],
+    }),
+    node_modules: {
+      ws: t.fixture('symlink', '../ws'),
+    },
+    ws: {
+      'package.json': JSON.stringify({
+        name: 'ws',
+        version: '1.0.0',
+        scripts: {
+          prepare: `node -e "require('fs').writeFileSync('ws-prepare', '')"`,
+        },
+      }),
+    },
+  })
+  // No allowScripts entry and the escape hatch off: only the isWorkspace
+  // bypass can let this script through.
+  const arb = newArb({ path, dangerouslyAllowAllScripts: false })
+  await arb.rebuild()
+  t.equal(
+    fs.statSync(resolve(path, 'ws/ws-prepare')).isFile(),
+    true,
+    'workspace prepare ran despite no allowScripts entry'
+  )
+})
+
 t.test('do nothing if ignoreScripts=true and binLinks=false', async t => {
   const path = fixture(t, 'testing-rebuild-bundle-reified')
   const file = resolve(path, 'node_modules/@isaacs/testing-rebuild-bundle-a/node_modules/@isaacs/testing-rebuild-bundle-b/cwd')
@@ -153,7 +292,7 @@ t.test('do not run scripts for nodes on trash list', async t => {
   t.throws(() => fs.statSync(file), 'bundle build script not run')
 })
 
-t.test('dont blow up if package.json is borked', async t => {
+t.test('do not blow up if package.json is borked', async t => {
   const path = fixture(t, 'testing-rebuild-bundle-reified')
   const loc = 'node_modules/@isaacs/testing-rebuild-bundle-a/node_modules/@isaacs/testing-rebuild-bundle-b'
   const file = resolve(path, loc, 'cwd')
@@ -197,7 +336,7 @@ t.test('verify dep flags in script environments', async t => {
     const file = resolve(path, 'node_modules', pkg, 'env')
     t.strictSame(flags, fs.readFileSync(file, 'utf8').split('\n'), pkg)
   }
-  t.strictSame(checkLogs().sort((a, b) =>
+  t.strictSame(checkLogs().filter(l => l[0] === 'info' && l[1] === 'run').sort((a, b) =>
     localeCompare(a[2], b[2]) || (typeof a[4] === 'string' ? -1 : 1)), [
     ['info', 'run', 'devdep@1.0.0', 'postinstall', 'node_modules/devdep', 'node ../../env.js'],
     ['info', 'run', 'devdep@1.0.0', 'postinstall', { code: 0, signal: null }],
@@ -225,7 +364,7 @@ t.test('run scripts in foreground if foregroundScripts set', async t => {
     },
   })
 
-  const arb = new Arborist({ path, registry, foregroundScripts: true })
+  const arb = new Arborist({ path, foregroundScripts: true, dangerouslyAllowAllScripts: true })
   await arb.rebuild()
   // add a sentinel to make sure we didn't get too many entries, since
   // t.match() will allow trailing/extra values in the test object.
@@ -247,7 +386,7 @@ t.test('run scripts in foreground if foregroundScripts set', async t => {
   ])
 })
 
-t.test('log failed exit codes as well, even if we dont crash', async t => {
+t.test('log failed exit codes as well, even if we do not crash', async t => {
   const path = t.testdir({
     'package.json': JSON.stringify({
       optionalDependencies: { optdep: '1' },
@@ -414,14 +553,13 @@ t.test('rebuild node-gyp dependencies lacking both preinstall and install script
       },
     }),
   })
-  const arb = new Arborist({ path, registry })
+  const arb = new Arborist({ path, dangerouslyAllowAllScripts: true })
   await arb.rebuild()
   t.match(RUNS, [
     {
       event: 'install',
       path: resolve(path, 'node_modules/dep'),
       pkg: { scripts: { install: 'node-gyp rebuild' } },
-      stdioString: true,
       env: {
         npm_package_resolved: null,
         npm_package_integrity: null,
@@ -439,7 +577,7 @@ t.test('rebuild node-gyp dependencies lacking both preinstall and install script
 t.test('do not rebuild node-gyp dependencies with gypfile:false', async t => {
   // use require-inject so we don't need an actual massive binary dep fixture
   const Arborist = t.mock('../../lib/arborist/index.js', {
-    '@npmcli/run-script': async opts => {
+    '@npmcli/run-script': async () => {
       throw new Error('should not run any scripts')
     },
   })
@@ -461,7 +599,7 @@ t.test('do not rebuild node-gyp dependencies with gypfile:false', async t => {
       },
     }),
   })
-  const arb = new Arborist({ path, registry })
+  const arb = new Arborist({ path, dangerouslyAllowAllScripts: true })
   await arb.rebuild()
 })
 
@@ -499,7 +637,7 @@ t.test('do not run lifecycle scripts of linked deps twice', async t => {
       return require('@npmcli/run-script')(opts)
     },
   })
-  const arb = new Arborist({ path, registry })
+  const arb = new Arborist({ path, dangerouslyAllowAllScripts: true })
   await arb.rebuild()
   t.equal(RUNS.length, 1, 'should run postinstall script only once')
   t.match(RUNS, [
@@ -545,7 +683,7 @@ t.test('workspaces', async t => {
       return require('@npmcli/run-script')(opts)
     },
   })
-  const arb = new Arborist({ path, registry })
+  const arb = new Arborist({ path, dangerouslyAllowAllScripts: true })
 
   await arb.rebuild()
   t.equal(RUNS.length, 2, 'should run prepare script only once per ws')
@@ -594,7 +732,7 @@ t.test('workspaces', async t => {
         return { code: 0, signal: null }
       },
     })
-    const arb = new Arborist({ path, registry, binLinks: false })
+    const arb = new Arborist({ path, binLinks: false, dangerouslyAllowAllScripts: true })
 
     await arb.rebuild()
     t.equal(RUNS.length, 1, 'should run prepare script only once')
@@ -642,7 +780,7 @@ t.test('workspaces', async t => {
         return { code: 0, signal: null }
       },
     })
-    const arb = new Arborist({ path, registry })
+    const arb = new Arborist({ path, dangerouslyAllowAllScripts: true })
 
     await arb.rebuild()
     t.equal(RUNS.length, 1, 'should run prepare script only once')
@@ -805,8 +943,8 @@ t.test('no workspaces', async t => {
   })
   const arb = new Arborist({
     path,
-    registry,
     workspacesEnabled: false,
+    dangerouslyAllowAllScripts: true,
   })
 
   await arb.rebuild()
@@ -817,4 +955,39 @@ t.test('no workspaces', async t => {
       pkg: { name: 'no-workspaces-powered-project' },
     },
   ])
+})
+
+t.test('do not run lifecycle scripts of linked deps twice', async t => {
+  const testdir = t.testdir({
+    project: {
+      'package.json': JSON.stringify({
+        name: 'my-project',
+        version: '1.0.0',
+        dependencies: {
+          foo: 'file:../foo',
+        },
+      }),
+      node_modules: {
+        foo: t.fixture('symlink', '../../foo'),
+      },
+    },
+    foo: {
+      'package.json': JSON.stringify({
+        name: 'foo',
+        version: '1.0.0',
+        scripts: {
+          postinstall: 'echo "ok"',
+        },
+      }),
+    },
+  })
+
+  const path = resolve(testdir, 'project')
+  const Arborist = t.mock('../../lib/arborist/index.js', {
+    '@npmcli/run-script': () => {
+      throw new Error('should not run any scripts')
+    },
+  })
+  const arb = new Arborist({ path, ignoreScripts: true })
+  await arb.rebuild()
 })
